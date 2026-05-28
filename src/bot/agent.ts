@@ -1,28 +1,40 @@
 import OpenAI from 'openai';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
-import { botTools, executeTool } from './tools';
-import { getMemory, saveMemory } from '../data/database';
+import { botTools, executeTool, getPendingImages, PendingImage } from './tools';
+import { getMemory, saveMemory, getSessionLastActivity, clearSession } from '../data/database';
 import { getAllProducts } from '../data/catalog';
+import { SECURITY_PROMPT } from './prompts';
 
 const MAX_HISTORY_LENGTH = 15;
+const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12 horas en milisegundos
 
-const MODEL_CASCADE = [
-    { id: 'gemini-3.1-flash-lite-preview', tools: true  },
-    { id: 'gemini-2.5-flash-lite',         tools: true  },
-    { id: 'gemini-2.5-flash',              tools: true  },
-    { id: 'gemma-3-27b-it',                tools: false },
-    { id: 'gemini-2.5-pro',                tools: true  },
-    { id: 'gemma-3-4b-it',                 tools: false },
+// --- CASCADAS DE MODELOS SEGÚN COMPLEJIDAD ---
+
+// SIMPLE
+const SIMPLE_MODEL_CASCADE = [
+    { id: 'gemini-2.0-flash-lite',    tools: true  },
+    { id: 'gemini-3.1-flash-lite',    tools: true  },
+    { id: 'gemini-2.5-flash-lite',    tools: true  },
 ];
 
+// COMPLEJO
+const COMPLEX_MODEL_CASCADE = [
+    { id: 'gemini-2.5-flash',         tools: true  },
+    { id: 'gemini-3.1-flash-lite',    tools: true  },
+    { id: 'gemini-2.5-flash-lite',    tools: true  },
+];
+
+type ModelEntry = { id: string; tools: boolean };
+
 async function createWithCascade(
+    cascade: ModelEntry[],
     apiKeys: string[],
     baseURL: string | undefined,
     params: Omit<Parameters<OpenAI['chat']['completions']['create']>[0], 'model'>
 ): Promise<{ completion: OpenAI.Chat.ChatCompletion; usedTools: boolean }> {
     let lastError: any;
-    for (const entry of MODEL_CASCADE) {
+    for (const entry of cascade) {
         for (const apiKey of apiKeys) {
             try {
                 const openai = new OpenAI({ apiKey, baseURL });
@@ -32,8 +44,8 @@ async function createWithCascade(
                     delete callParams.tool_choice;
                 }
                 const result = await openai.chat.completions.create(callParams);
-                if (entry.id !== MODEL_CASCADE[0].id) {
-                    logger.warn(`Cascada: ${MODEL_CASCADE[0].id} falló, usando ${entry.id}`);
+                if (entry.id !== cascade[0].id) {
+                    logger.warn(`Cascada: ${cascade[0].id} falló, usando ${entry.id}`);
                 }
                 return { completion: result as OpenAI.Chat.ChatCompletion, usedTools: entry.tools };
             } catch (err: any) {
@@ -48,6 +60,19 @@ async function createWithCascade(
         }
     }
     throw lastError;
+}
+
+// --- EVALUADOR DE COMPLEJIDAD DE TAREAS ---
+function isComplexTask(userText: string, hasMedia: boolean): boolean {
+    if (hasMedia) return true; // Procesamiento multimodal siempre requiere modelo avanzado
+
+    // Si el texto supera los 100 caracteres, asumimos que es una consulta detallada
+    if (userText.length > 100) return true;
+
+    // Palabras clave que delatan intenciones complejas del negocio (ventas, stock, precios)
+    const complexKeywords = /precio|costo|cuánto|vende|comprar|pagar|link|checkout|catálogo|producto|inventario|disponible|asistente|imagen|foto|catálogo|bici|pedalazo|control/i;
+    
+    return complexKeywords.test(userText);
 }
 
 async function buildCatalogContext(storeId: string): Promise<string> {
@@ -76,6 +101,10 @@ async function getOrCreateSession(sessionId: string, systemPrompt: string): Prom
     return mem;
 }
 
+
+
+export type BotResponse = { text: string; images: PendingImage[] };
+
 export async function handleUserMessage(
     sessionId: string,
     storeId: string,
@@ -84,10 +113,20 @@ export async function handleUserMessage(
     systemPrompt: string,
     customApiKey: string | null,
     media?: {mimetype: string, data: string}
-): Promise<string> {
+): Promise<BotResponse> {
 
     const catalogContext = await buildCatalogContext(storeId);
-    const enrichedSystemPrompt = systemPrompt + catalogContext;
+    const enrichedSystemPrompt = SECURITY_PROMPT + "\n\n" + systemPrompt + catalogContext;
+
+    // --- Cierre por inactividad ---
+    const lastActivity = await getSessionLastActivity(sessionId);
+    if (lastActivity) {
+        const elapsed = Date.now() - lastActivity.getTime();
+        if (elapsed > INACTIVITY_TIMEOUT_MS) {
+            logger.info(`Sesión ${sessionId} inactiva por ${Math.round(elapsed / 3600000)}h — reiniciando conversación.`);
+            await clearSession(sessionId, storeId, senderPhone, enrichedSystemPrompt);
+        }
+    }
 
     const history = await getOrCreateSession(sessionId, enrichedSystemPrompt);
 
@@ -124,8 +163,14 @@ export async function handleUserMessage(
         return msg;
     }) as OpenAI.Chat.ChatCompletionMessageParam[];
 
+    // --- ENRUTAMIENTO DINÁMICO DE CASCADA ---
+    const isComplex = isComplexTask(userText, !!media);
+    const activeCascade = isComplex ? COMPLEX_MODEL_CASCADE : SIMPLE_MODEL_CASCADE;
+    
+    logger.info(`Sesión ${sessionId} enrutada a cascada: ${isComplex ? 'COMPLEJA' : 'SIMPLE'} (Primer intento: ${activeCascade[0].id})`);
+
     try {
-        let { completion: aiResponse, usedTools } = await createWithCascade(apiKeys, baseURL, {
+        let { completion: aiResponse, usedTools } = await createWithCascade(activeCascade, apiKeys, baseURL, {
             messages: sanitizedHistory,
             tools: botTools,
             tool_choice: 'auto'
@@ -141,7 +186,7 @@ export async function handleUserMessage(
                     try {
                         const functionName = toolCall.function.name;
                         const functionArgs = JSON.parse(toolCall.function.arguments);
-                        const functionResult = await executeTool(functionName, functionArgs, storeId, senderPhone);
+                        const functionResult = await executeTool(functionName, functionArgs, storeId, senderPhone, sessionId, enrichedSystemPrompt);
                         history.push({
                             role: 'tool',
                             tool_call_id: toolCall.id,
@@ -157,7 +202,8 @@ export async function handleUserMessage(
                     }
                 }
 
-                const next = await createWithCascade(apiKeys, baseURL, {
+                // Si entramos en ejecución de herramientas, seguimos asegurando el uso de la cascada activa
+                const next = await createWithCascade(activeCascade, apiKeys, baseURL, {
                     messages: history,
                     tools: botTools,
                     tool_choice: 'auto'
@@ -182,7 +228,9 @@ export async function handleUserMessage(
 
         await saveMemory(sessionId, storeId, senderPhone, finalHistory);
 
-        return finalContent;
+        const images = getPendingImages();
+
+        return { text: finalContent, images };
 
     } catch (error: any) {
         logger.error(`Error conversacional sesión ${sessionId}:`, error.message, error.status, JSON.stringify(error.error ?? error.response?.data ?? ''));
@@ -195,7 +243,7 @@ export async function handleUserMessage(
             ];
             await saveMemory(sessionId, storeId, senderPhone, freshHistory);
             try {
-                const { completion: retryResponse } = await createWithCascade(apiKeys, baseURL, {
+                const { completion: retryResponse } = await createWithCascade(activeCascade, apiKeys, baseURL, {
                     messages: freshHistory,
                     tools: botTools,
                     tool_choice: 'auto'
@@ -203,11 +251,11 @@ export async function handleUserMessage(
                 const retryContent = retryResponse.choices[0].message.content || "Hubo un error de procesamiento.";
                 freshHistory.push({ role: 'assistant', content: retryContent });
                 await saveMemory(sessionId, storeId, senderPhone, freshHistory);
-                return retryContent;
+                return { text: retryContent, images: [] };
             } catch (retryErr: any) {
                 logger.error(`Reintento fallido para ${sessionId}: ${retryErr.message}`);
             }
         }
-        return "Lo siento, tengo un problema y no te puedo atender en este momento. Escribe de nuevo más tarde.";
+        return { text: "Lo siento, tengo un problema y no te puedo atender en este momento. Escribe de nuevo más tarde.", images: [] };
     }
 }

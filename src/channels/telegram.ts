@@ -62,7 +62,7 @@ export async function initTelegramBot(storeId: string, token: string) {
             );
 
             if (response) {
-                await bot.sendMessage(chatId, response);
+                await bot.sendMessage(chatId, response.text);
             }
         } catch (error) {
             logger.error(`❌ [${storeId}] Error en Telegram:`, error);

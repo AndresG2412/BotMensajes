@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import { logger } from '../utils/logger';
 import { config } from '../config/env';
@@ -8,7 +8,8 @@ import { recordUserActivity } from '../bot/remarketing';
 import { db } from '../data/connection';
 import { stores } from '../data/schema';
 import { eq } from 'drizzle-orm';
-import { getSession, setSessionPause, checkRateLimit, incrementMessageCount } from '../data/database';
+import { getSession, setSessionPause, checkRateLimit, incrementMessageCount, getMemory, saveMemory } from '../data/database';
+import { SYSTEM_PROMPT } from '../bot/prompts';
 
 export const whatsappRouter = Router();
 
@@ -17,6 +18,72 @@ const clients = new Map<string, Client>();
 const qrCodes = new Map<string, string>();
 const clientStatus = new Map<string, 'DISCONNECTED' | 'CONNECTING' | 'QR_READY' | 'CONNECTED'>();
 const messageQueues = new Map<string, Promise<void>>();
+
+export async function processUnansweredMessage(sessionId: string, storeId: string, phone: string) {
+    try {
+        const memNow = await getMemory(sessionId);
+        if (memNow.length === 0) return;
+        
+        const lastMsg = memNow[memNow.length - 1];
+        if (lastMsg.role !== 'user') return; // Si no es del usuario, no hay nada que responder
+
+        logger.info(`Procesando mensaje pendiente para ${sessionId}`);
+        
+        // Evitamos que el mensaje se duplique al pasarlo a la IA
+        memNow.pop();
+        await saveMemory(sessionId, storeId, phone, memNow);
+
+        const textToProcess = lastMsg.content as string || "Hola";
+
+        const client = clients.get(storeId);
+        if (!client) {
+            logger.error(`Bot no inicializado para la tienda ${storeId}`);
+            return;
+        }
+
+        const messageFrom = phone.includes('@') ? phone : `${phone}@c.us`;
+
+        const currentQueue = messageQueues.get(sessionId) || Promise.resolve();
+        const nextQueue = currentQueue.then(async () => {
+            // Ya asumimos que se despausó antes de llamar a esta función
+            const store = await db.query.stores.findFirst({
+                where: eq(stores.id, storeId)
+            });
+
+            const typingDelay = Math.floor(Math.random() * 3000) + 2000;
+            await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+            const defaultPrompt = SYSTEM_PROMPT;
+
+            const aiResponse = await handleUserMessage(
+                sessionId,
+                storeId,
+                phone,
+                textToProcess,
+                store?.systemPrompt?.trim() ? store.systemPrompt : defaultPrompt,
+                (store?.openaiApiKey?.trim() || config.OPENAI_API_KEY) || "",
+                undefined
+            );
+
+            for (const img of aiResponse.images) {
+                try {
+                    const media = new MessageMedia(img.mimetype, img.base64);
+                    await client.sendMessage(messageFrom, media, { caption: img.caption || undefined });
+                } catch (imgErr: any) {
+                    logger.error(`Error enviando imagen por WA [${storeId}]: ${imgErr.message}`);
+                }
+            }
+
+            await client.sendMessage(messageFrom, aiResponse.text);
+            await incrementMessageCount(sessionId);
+            await recordUserActivity(sessionId);
+        }).catch(err => logger.error(`Error en cola processUnansweredMessage [${storeId}]: ${err.message}`));
+
+        messageQueues.set(sessionId, nextQueue);
+    } catch (e: any) {
+        logger.error(`Error en processUnansweredMessage: ${e.message}`);
+    }
+}
 
 /**
  * Inicializa todos los bots que estén activos en la base de datos
@@ -36,6 +103,35 @@ export async function initializeWhatsAppClient() {
                 logger.error(`❌ No se pudo iniciar el bot [${store.id}]: ${err.message}`);
             }
         }
+
+        // Job de revisión global de inactividad (cada 1 minuto)
+        setInterval(async () => {
+            try {
+                const { getAllSessions } = await import('../data/database');
+                const sessions = await getAllSessions();
+                const now = new Date().getTime();
+                
+                for (const session of sessions) {
+                    if (session.isPaused && session.history && session.history.length > 0) {
+                        const lastMsg = session.history[session.history.length - 1];
+                        if (lastMsg.role === 'user') {
+                            const updatedAtTime = (session.updatedAt && typeof (session.updatedAt as any).getTime === 'function')
+                                ? (session.updatedAt as any).getTime()
+                                : new Date(session.updatedAt).getTime();
+                            const timeDiff = now - updatedAtTime;
+                            if (timeDiff >= 5 * 60 * 1000) { // 5 minutos exactos
+                                logger.info(`Reactivando sesión ${session.sessionId} por inactividad del admin (5 min)`);
+                                await resumeChat(session.sessionId);
+                                await processUnansweredMessage(session.sessionId, session.storeId, session.phone);
+                            }
+                        }
+                    }
+                }
+            } catch (err: any) {
+                logger.error(`Error en job de revisión de sesiones: ${err.message}`);
+            }
+        }, 60 * 1000);
+
     } catch (error: any) {
         logger.error(`Error inicializando clientes: ${error.message}`);
     }
@@ -106,12 +202,10 @@ export async function startBotInstance(storeId: string) {
             if (isLid) {
                 try {
                     const contact = await message.getContact();
-                    // contact.id.user tiene el número real (ej: "573219813212")
                     const idUser = (contact as any)?.id?.user;
                     if (idUser && /^\d{7,15}$/.test(idUser)) {
                         senderPhone = idUser;
                     } else {
-                        // Fallback: getFormattedNumber
                         try {
                             const formatted = await (contact as any).getFormattedNumber();
                             if (formatted) senderPhone = formatted.replace(/[^0-9]/g, '');
@@ -134,7 +228,19 @@ export async function startBotInstance(storeId: string) {
             }
 
             const currentSession = await getSession(sessionId);
-            if (currentSession?.isPaused) return;
+            
+            if (currentSession?.isPaused) {
+                // Aún en pausa: guardar el mensaje del cliente en el historial para que el admin lo vea
+                try {
+                    const history = await getMemory(sessionId);
+                    history.push({ role: 'user', content: userText });
+                    await saveMemory(sessionId, storeId, senderPhone, history);
+                    // Ya NO usamos setTimeout aquí, el setInterval global lo manejará
+                } catch (e: any) {
+                    logger.error(`Error guardando mensaje en modo pausa: ${e.message}`);
+                }
+                return;
+            }
 
             // CONTROL DE GASTO: Rate Limit
             const limit = await checkRateLimit(sessionId, 50); // 50 mensajes por día
@@ -143,7 +249,7 @@ export async function startBotInstance(storeId: string) {
                 return;
             }
 
-            // Encolar mensajes para evitar colisiones
+            // --- Encolar mensajes normales ---
             const currentQueue = messageQueues.get(sessionId) || Promise.resolve();
             const nextQueue = currentQueue.then(async () => {
                 const sessionCheck = await getSession(sessionId);
@@ -158,17 +264,7 @@ export async function startBotInstance(storeId: string) {
                     where: eq(stores.id, storeId)
                 });
 
-                const defaultPrompt = `Eres Santi, asesor de la tienda. Tu objetivo es vender de forma MUY natural por WhatsApp, como un humano real.
-REGLAS ESTRICTAS:
-1. NUNCA suenes como un robot o call center (nada de "¡Excelente! Me encanta escuchar eso" o "¡Claro que sí!").
-2. Respuestas CORTAS, máximo 2 o 3 líneas. Ve al grano.
-3. Usa máximo 1 emoji por mensaje, o a veces ninguno.
-4. Habla coloquial, fresco, como si le escribieras a un amigo ("Súper", "Dale", "Mira, te cuento...").
-5. GARANTÍA: Todos los productos están en Hotmart, así que SIEMPRE tienen 7 días de garantía de satisfacción o se devuelve el dinero. Úsalo como cierre de venta.
-6. Si te piden algo, búscalo en el catálogo. Si no hay exacto, recomienda algo similar de una vez sin dar tantos rodeos.
-7. PQR y Soporte: Si un cliente tiene una Petición, Queja o Reclamo, dale SIEMPRE este correo de soporte: ${store?.pqrEmail || 'soporte@tienda.com'} y dile que le responderán súper rápido.
-8. Cierra la venta con preguntas simples ("¿Te paso el link?", "¿Te animas con este?").
-9. PAGO: Si el cliente pregunta cómo pagar, pide ayuda con el pago, o tiene problemas para pagar, NO expliques el proceso paso a paso. Usa el tool generate_payment_link y envía ÚNICAMENTE este aviso fijo: "⚠️ Aviso importante sobre el pago: El proceso de pago se realiza en nuestra plataforma segura. Haz clic en el enlace y sigue las instrucciones que aparecen en pantalla. Por tu seguridad, NUNCA compartas los datos de tu tarjeta por este chat. Si tienes problemas con el pago, contáctanos por este mismo medio y te ayudaremos. 🔒"`;
+                const defaultPrompt = SYSTEM_PROMPT;
 
                 const aiResponse = await handleUserMessage(
                     sessionId,
@@ -180,7 +276,19 @@ REGLAS ESTRICTAS:
                     undefined
                 );
 
-                await client.sendMessage(message.from, aiResponse);
+                // Enviar imágenes del producto si las hay
+                for (const img of aiResponse.images) {
+                    try {
+                        const media = new MessageMedia(img.mimetype, img.base64);
+                        await client.sendMessage(message.from, media, {
+                            caption: img.caption || undefined
+                        });
+                    } catch (imgErr: any) {
+                        logger.error(`Error enviando imagen por WA [${storeId}]: ${imgErr.message}`);
+                    }
+                }
+
+                await client.sendMessage(message.from, aiResponse.text);
                 await incrementMessageCount(sessionId);
                 await recordUserActivity(sessionId);
             }).catch(err => logger.error(`Error en cola [${storeId}]: ${err.message}`));

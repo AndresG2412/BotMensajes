@@ -12,12 +12,16 @@ import { initializeTelegramClients, stopTelegramBot } from './channels/telegram'
 import { startRemarketingCron } from './bot/remarketing';
 import { dashboardRouter } from './routes/dashboard';
 import path from 'path';
+import { eq } from 'drizzle-orm';
+import { initializeFirebase } from './config/firebase';
 import { db } from './data/connection';
 import { users, stores } from './data/schema';
-import { eq } from 'drizzle-orm';
 
 function bootstrap() {
     logger.info(`Iniciando AI Bot para Ecommerce: ${config.STORE_NAME}`);
+    
+    // Iniciar conexión con Firebase
+    initializeFirebase();
     
     const app = express();
     
@@ -140,7 +144,7 @@ function bootstrap() {
     initializeTelegramClients();
 
     // INICIAR EL MOTOR DE REMARKETING (Carritos abandonados)
-    startRemarketingCron((storeId, to, msg) => sendWhatsAppMessage(storeId, to, msg));
+    // startRemarketingCron((storeId, to, msg) => sendWhatsAppMessage(storeId, to, msg));
 
     // Manejar cierres inesperados (Graceful Shutdown)
     const shutdown = async () => {

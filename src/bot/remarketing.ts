@@ -6,6 +6,7 @@ import { getMemory, saveMemory } from '../data/database';
 import { getAllProducts } from '../data/catalog';
 import OpenAI from 'openai';
 import { config } from '../config/env';
+import { getRemarketingPrompt } from './prompts';
 
 async function generateRemarketingMessage(
     storeId: string,
@@ -20,22 +21,7 @@ async function generateRemarketingMessage(
         return `- ${p.name} — ${price}${url}`;
     }).join('\n');
 
-    const remarketingInstruction = `Eres un asistente de ventas. El cliente con quien estuviste hablando no ha vuelto a escribir en varias horas.
-Tu tarea es escribir UN SOLO mensaje de seguimiento natural, personalizado y persuasivo para recuperar su interés.
-El mensaje debe:
-- Basarse en el contexto de la conversación anterior (qué preguntó, qué le interesó)
-- Adaptarse al tipo de producto/servicio que vende la tienda (infoproducto, físico, servicio, etc.)
-- Sonar humano y cercano, NO genérico ni de plantilla
-- Incluir una llamada a la acción clara
-- Ser breve (máximo 3-4 líneas)
-NO menciones envíos físicos ni despachos si son productos digitales.
-
-Información de la tienda:
-${systemPrompt}
-
-${catalogLines ? `Catálogo:\n${catalogLines}` : ''}
-
-Escribe ÚNICAMENTE el mensaje, sin explicaciones ni comillas.`;
+    const remarketingInstruction = getRemarketingPrompt(systemPrompt, catalogLines);
 
     const openai = new OpenAI({
         apiKey,

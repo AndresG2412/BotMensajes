@@ -570,9 +570,10 @@
                         <div class="avatar"><i class="ph ph-whatsapp-logo"></i></div>
                         <div class="info">
                             <h3 id="activeUserPhone"></h3>
-                            <span><span class="dot"></span> Interacción Reciente</span>
+                            <span id="chatStatusText"><span class="dot"></span> Interacción Reciente</span>
                         </div>
-                        <button onclick="clearActiveChat()" title="Limpiar historial" style="margin-left:auto;background:#ff4d4d;color:white;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;"><i class="ph ph-trash"></i> Limpiar chat</button>
+                        <button id="btnToggleBot" onclick="toggleBotPause()" title="Reactivar Bot" style="margin-left:auto;background:var(--brand);color:white;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;display:none;"><i class="ph ph-robot"></i> Reactivar Bot</button>
+                        <button onclick="clearActiveChat()" title="Limpiar historial" style="margin-left:8px;background:#ff4d4d;color:white;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;"><i class="ph ph-trash"></i> Limpiar chat</button>
                     </div>
                     <div class="empty-state" id="chatEmpty">
                         <div class="empty-icon"><i class="ph ph-chats"></i></div>
@@ -1012,7 +1013,8 @@
     function renderActiveChat(s) {
         const sid = s.sessionId;
         const history = Array.isArray(s.history) ? s.history : [];
-        const chatHash = sid + '|' + history.length + '|' + JSON.stringify(history[history.length - 1]?.content || '').substring(0, 50);
+        const isPaused = !!s.isPaused;
+        const chatHash = sid + '|' + history.length + '|' + isPaused + '|' + JSON.stringify(history[history.length - 1]?.content || '').substring(0, 50);
         if (_lastChatHash === chatHash) return;
         _lastChatHash = chatHash;
         document.getElementById('chatEmpty').style.display = 'none';
@@ -1022,6 +1024,18 @@
         msgs.style.display = 'flex';
         msgs.innerHTML = '';
         document.getElementById('activeUserPhone').textContent = cleanPhone(sid);
+
+        // Mostrar estado de pausa
+        const statusEl = document.getElementById('chatStatusText');
+        const btnToggle = document.getElementById('btnToggleBot');
+        if (isPaused) {
+            statusEl.innerHTML = '<span class="dot" style="background:var(--yellow);"></span> Bot Pausado — respondiendo t\u00fa';
+            btnToggle.style.display = 'flex';
+        } else {
+            statusEl.innerHTML = '<span class="dot"></span> Interacci\u00f3n Reciente';
+            btnToggle.style.display = 'none';
+        }
+
         history.forEach(m => {
             if (m.role === 'system') return;
             const div = document.createElement('div');
@@ -1063,9 +1077,26 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId: activeSessionId, message, phone, storeId })
             });
+            _lastChatHash = ''; // Forzar re-render
             await loadSessions();
         } catch(e) {
             alert('Error enviando mensaje: ' + e.message);
+        }
+    }
+
+    async function toggleBotPause() {
+        if (!activeSessionId) return;
+        try {
+            const res = await fetch('/dashboard/api/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: activeSessionId })
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            _lastChatHash = ''; // Forzar re-render
+            await loadSessions();
+        } catch(e) {
+            alert('Error reactivando bot: ' + e.message);
         }
     }
 

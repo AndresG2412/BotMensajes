@@ -1,17 +1,18 @@
 import { Router, Request, Response } from 'express';
-import { getAllSessions, deleteSession } from '../data/database';
+import { getAllSessions, deleteSession, getMemory, saveMemory } from '../data/database';
 import { getAllProducts, createProduct, updateProduct, deleteProduct } from '../data/catalog';
 import { db } from '../data/connection';
 import { stores } from '../data/schema';
 import { eq } from 'drizzle-orm';
 import path from 'path';
-import { getBotStatus, startBotInstance, stopBotInstance, sendWhatsAppMessage, pauseChat } from '../channels/whatsapp';
+import { getBotStatus, startBotInstance, stopBotInstance, sendWhatsAppMessage, pauseChat, resumeChat, processUnansweredMessage } from '../channels/whatsapp';
 import axios from 'axios';
 import OpenAI from 'openai';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { users } from '../data/schema';
 import crypto from 'crypto';
+import { DEFAULT_STORE_SYSTEM_PROMPT, JSON_API_SYSTEM_PROMPT, TEST_MODEL_PROMPT, getProductExtractionPrompt } from '../bot/prompts';
 
 export const dashboardRouter = Router();
 
@@ -97,7 +98,7 @@ dashboardRouter.post('/api/stores', checkSuperAdmin, async (req: Request, res: R
         const newStore = await db.insert(stores).values({
             id,
             name,
-            systemPrompt: systemPrompt || "Eres un asistente de ventas experto.",
+            systemPrompt: systemPrompt || DEFAULT_STORE_SYSTEM_PROMPT,
             openaiApiKey: openaiApiKey || null,
             pqrEmail: pqrEmail || null,
             telegramToken: telegramToken || null,
@@ -362,31 +363,14 @@ dashboardRouter.post('/api/products/extract', async (req: Request, res: Response
             baseURL: config.OPENAI_BASE_URL || undefined
         });
 
-        const prompt = `Analiza el siguiente texto extraído de una página web y extrae la información del producto, curso o servicio que se ofrece.
-ESTO ES CRÍTICO: DEBES DEVOLVER ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO.
-NUNCA inventes productos (ej. no inventes "Aceites para cabello" si el texto habla de "Recetas" o viceversa). Si la página vende un curso o un reto, extrae eso.
-Si no encuentras información útil, deja los campos en blanco, pero NO alucines.
-Tu respuesta debe empezar con '{' y terminar con '}'.
-Usa las siguientes llaves estrictamente:
-{
-  "nombre": "Nombre del producto o servicio real",
-  "precio": "Precio en número si aparece (solo el valor, sin símbolos)",
-  "categoria": "Categoría sugerida basada en el contenido real",
-  "descripcion_corta": "Un resumen real de 1 línea",
-  "descripcion_larga": "Descripción detallada real de lo que se ofrece",
-  "imagen": "URL de la imagen principal si la encuentras, o vacio",
-  "system_prompt_sugerido": "Escribe un prompt de sistema conciso (máximo 400 caracteres) para que un bot de WhatsApp venda este producto con el tono de la página."
-}
-
-Texto a analizar:
-${cleanHtml}`;
+        const prompt = getProductExtractionPrompt(cleanHtml);
 
         let aiResponse;
         try {
             const aiParams: any = {
                 model: config.OPENAI_MODEL,
                 messages: [
-                    { role: 'system', content: 'You are an API that strictly returns raw JSON objects. Never include conversational text, lists, or markdown. Your output must start with { and end with }.' },
+                    { role: 'system', content: JSON_API_SYSTEM_PROMPT },
                     { role: 'user', content: prompt }
                 ]
             };
@@ -448,11 +432,48 @@ dashboardRouter.post('/api/reply', async (req: any, res: Response) => {
         }
         
         if (sessionId) {
-            pauseChat(sessionId);
+            await pauseChat(sessionId);
+
+            // Guardar el mensaje del admin en el historial de Firebase
+            try {
+                const history = await getMemory(sessionId);
+                history.push({ role: 'assistant', content: message });
+                await saveMemory(sessionId, storeId, phone, history);
+            } catch (e: any) {
+                logger.error(`Error guardando mensaje de admin en historial: ${e.message}`);
+            }
         }
         
         await sendWhatsAppMessage(storeId, phone, message);
         res.json({ success: true, botPaused: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint para reactivar el bot en un chat pausado
+dashboardRouter.post('/api/resume', async (req: any, res: Response) => {
+    try {
+        const { sessionId } = req.body;
+        if (!sessionId) {
+            res.status(400).json({ error: 'Falta sessionId' });
+            return;
+        }
+        await resumeChat(sessionId);
+
+        // Extraer storeId y phone del sessionId (formato: storeId_phone)
+        const parts = sessionId.split('_');
+        if (parts.length >= 2) {
+            const storeId = parts[0];
+            const phone = parts.slice(1).join('_');
+            
+            // Verificamos de forma asíncrona si hay mensajes del usuario sin contestar y los procesamos
+            processUnansweredMessage(sessionId, storeId, phone).catch(err => 
+                logger.error(`Error en processUnansweredMessage manual: ${err.message}`)
+            );
+        }
+
+        res.json({ success: true, botResumed: true });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -475,7 +496,7 @@ dashboardRouter.get('/api/test-models', checkSuperAdmin, async (req: Request, re
         try {
             const r = await openai.chat.completions.create({
                 model,
-                messages: [{ role: 'user', content: 'Di solo: OK' }],
+                messages: [{ role: 'user', content: TEST_MODEL_PROMPT }],
                 max_tokens: 5
             } as any);
             results[model] = `✅ ${r.choices[0].message.content?.trim()}`;
