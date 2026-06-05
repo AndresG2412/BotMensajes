@@ -19,18 +19,19 @@ import { users, stores } from './data/schema';
 
 function bootstrap() {
     logger.info(`Iniciando AI Bot para Ecommerce: ${config.STORE_NAME}`);
-    
+
     // Iniciar conexión con Firebase
     initializeFirebase();
-    
+
     const app = express();
-    
+
     // 1. Seguridad Básica (Headers)
     app.use(helmet({
         contentSecurityPolicy: false,
     }));
 
-    app.use(express.json());
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ limit: '10mb', extended: true }));
     app.use(cookieParser());
     app.use(cors());
 
@@ -43,11 +44,11 @@ function bootstrap() {
     app.use('/dashboard/api', limiter);
 
     // --- SISTEMA DE AUTENTICACIÓN POR COOKIE/JWT ---
-    
+
     // Middleware de protección
     const authMiddleware = (req: any, res: any, next: any) => {
         const token = req.cookies.auth_token;
-        
+
         const isApiRequest = req.originalUrl.includes('/api/') || req.xhr;
 
         if (!token) {
@@ -98,12 +99,12 @@ function bootstrap() {
                 // Implementación simple de hash comparativo (puedes mejorar esto con bcrypt después)
                 const hashedPass = crypto.createHash('sha256').update(password).digest('hex');
                 if (user.passwordHash === hashedPass || user.passwordHash === password) {
-                    const token = jwt.sign({ 
-                        user: user.username, 
-                        role: user.role, 
-                        storeId: user.storeId 
+                    const token = jwt.sign({
+                        user: user.username,
+                        role: user.role,
+                        storeId: user.storeId
                     }, config.JWT_SECRET, { expiresIn: '24h' });
-                    
+
                     res.cookie('auth_token', token, {
                         httpOnly: true,
                         sameSite: 'lax',
@@ -149,7 +150,7 @@ function bootstrap() {
     // Manejar cierres inesperados (Graceful Shutdown)
     const shutdown = async () => {
         logger.info('🛑 Cerrando el bot...');
-        
+
         try {
             const allStores = await db.query.stores.findMany({ where: eq(stores.isActive, true) });
             for (const s of allStores) {
@@ -168,7 +169,7 @@ function bootstrap() {
 
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
-    
+
     // Capturar errores fatales para no dejar navegadores zombies
     process.on('uncaughtException', async (err) => {
         logger.error('💥 Error Fatal no capturado:', err);

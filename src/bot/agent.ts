@@ -63,8 +63,27 @@ async function createWithCascade(
 }
 
 // --- EVALUADOR DE COMPLEJIDAD DE TAREAS ---
+function isGreeting(userText: string): boolean {
+    const text = userText.trim().toLowerCase().replace(/[¡!¿?.,]/g, '');
+    const greetingWords = new Set([
+        'hola', 'holaa', 'holaaa', 'buenas', 'buen dia', 'buen día', 'buenos dias', 'buenos días',
+        'buenas tardes', 'buenas noches', 'que tal', 'qué tal', 'como estas', 'cómo estás',
+        'como vas', 'cómo vas', 'como va', 'cómo va', 'alo', 'aló', 'hi', 'hello'
+    ]);
+    if (greetingWords.has(text)) return true;
+    
+    const words = text.split(/\s+/);
+    if (words.length <= 3 && words.some(word => greetingWords.has(word))) {
+        return true;
+    }
+    return false;
+}
+
 function isComplexTask(userText: string, hasMedia: boolean): boolean {
     if (hasMedia) return true; // Procesamiento multimodal siempre requiere modelo avanzado
+
+    // Si es un saludo, siempre se trata como tarea simple para usar modelos con alta cuota
+    if (isGreeting(userText)) return false;
 
     // Si el texto supera los 100 caracteres, asumimos que es una consulta detallada
     if (userText.length > 100) return true;

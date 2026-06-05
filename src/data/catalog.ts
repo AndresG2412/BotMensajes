@@ -147,7 +147,22 @@ export async function updateProduct(id: string, updates: Partial<Product>, store
         const docRef = db.collection('Propiedades').doc(id);
         const doc = await docRef.get();
         if (!doc.exists) return null;
-        await docRef.update(updates);
+
+        const dbUpdates: any = {};
+        if (updates.barrio !== undefined) dbUpdates.barrio = updates.barrio;
+        if (updates.baños !== undefined) dbUpdates.baños = updates.baños;
+        if (updates.caracteristicas !== undefined) dbUpdates.caracteristicas = updates.caracteristicas;
+        if (updates.ciudad !== undefined) dbUpdates.ciudad = updates.ciudad;
+        if (updates.habitaciones !== undefined) dbUpdates.habitaciones = updates.habitaciones;
+        if (updates.metros_cuadrados !== undefined) dbUpdates.metros_cuadrados = updates.metros_cuadrados;
+        if (updates.pisos !== undefined) dbUpdates.pisos = updates.pisos;
+        if (updates.price !== undefined) dbUpdates.precio = updates.price;
+        if (updates.referencia !== undefined) dbUpdates.referencia = updates.referencia;
+        if (updates.imagenes !== undefined) dbUpdates.Imagenes = updates.imagenes;
+        if (updates.folderCloudinary !== undefined) dbUpdates.FolderCloudinary = updates.folderCloudinary;
+        if (updates.checkoutUrl !== undefined) dbUpdates.checkoutUrl = updates.checkoutUrl;
+
+        await docRef.update(dbUpdates);
         const updated = await docRef.get();
         return mapDocToProduct(updated);
     } catch (e) {

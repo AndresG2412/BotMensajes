@@ -532,11 +532,11 @@
                 <i class="ph ph-storefront"></i> Productos <span class="badge" id="productCount">0</span>
             </button>
             <button class="tab-btn" onclick="switchTab('bots')" id="tabBots">
-                <i class="ph ph-robot"></i> Mis Bots
+                <i class="ph ph-robot"></i> Mis Datos
             </button>
-            <button class="tab-btn" onclick="switchTab('users')" id="tabUsers">
+            <!-- <button class="tab-btn" onclick="switchTab('users')" id="tabUsers">
                 <i class="ph ph-users"></i> Usuarios
-            </button>
+            </button> -->
         </div>
         <div class="header-actions">
             <button class="btn-icon" onclick="refreshAll()" title="Refrescar"><i class="ph ph-arrows-clockwise"></i></button>
@@ -554,12 +554,6 @@
                     <div class="sidebar-search">
                         <i class="ph ph-magnifying-glass"></i>
                         <input type="text" placeholder="Buscar número..." oninput="filterSessions(this.value)">
-                    </div>
-                    <div class="sidebar-search" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-                        <i class="ph ph-robot"></i>
-                        <select id="chatStoreFilter" onchange="loadSessions()" style="background:transparent; border:none; color:var(--text1); width:100%; font-size:13px; outline:none; cursor:pointer;">
-                            <option value="">Todos los bots</option>
-                        </select>
                     </div>
                     <div class="sessions-list" id="sessionsList">
                         <div class="empty-state" style="padding:40px;"><i class="ph ph-spinner" style="font-size:24px;animation:spin 1s linear infinite"></i><p style="margin-top:10px;">Cargando...</p></div>
@@ -595,12 +589,6 @@
                 <div class="products-toolbar">
                     <div style="display: flex; align-items: center; gap: 16px;">
                         <h2><i class="ph ph-package" style="vertical-align:middle;margin-right:6px;"></i> Catálogo</h2>
-                        <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border);">
-                            <i class="ph ph-robot" style="color: var(--text3);"></i>
-                            <select id="productStoreFilter" onchange="loadProducts()" style="background:transparent; border:none; color:var(--text); font-size:13px; outline:none; cursor:pointer; min-width: 150px;">
-                                <option value="">Todas las tiendas</option>
-                            </select>
-                        </div>
                     </div>
                     <button class="btn-primary" onclick="openProductModal()">
                         <i class="ph ph-plus-circle"></i> Agregar Producto
@@ -641,14 +629,13 @@
                 </div>
             </div>
         </div>
-
     </main>
 
     <!-- ───── MODAL ───── -->
     <div class="modal-overlay hidden" id="productModal">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="modalTitle">Nuevo Producto</h3>
+                <h3 id="modalTitle">Nueva Propiedad</h3>
                 <button class="btn-icon" onclick="closeProductModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
@@ -659,70 +646,64 @@
                         <!-- Options injected via JS -->
                     </select>
                 </div>
-                <div class="form-group" style="background: rgba(16,185,129,0.1); padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px dashed var(--brand);">
-                    <label style="color: var(--brand); font-weight: 600;"><i class="ph ph-magic-wand"></i> ✨ Autocompletar con IA</label>
-                    <div style="display: flex; gap: 8px; margin-top: 5px;">
-                        <input type="url" id="pMagicLink" placeholder="Pega el link aquí (Ej: Hotmart, Amazon...)" style="flex: 1; border-color: rgba(16,185,129,0.3);">
-                        <button type="button" onclick="extractWithAI()" id="btnMagic" class="btn-primary" style="padding: 0 16px;">
-                            Extraer
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Contenedor de Sugerencia de IA -->
-                <div id="aiPromptContainer" style="display:none; background: rgba(59,130,246,0.1); padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid rgba(59,130,246,0.3);">
-                    <label style="color: #60a5fa; font-weight: 600; font-size: 11px; display: block; margin-bottom: 4px;"><i class="ph ph-sparkle"></i> Contexto Sugerido para el Bot</label>
-                    <p id="pAiPromptText" style="font-size: 12px; color: var(--text2); font-style: italic; margin-bottom: 10px;"></p>
-                    <button type="button" onclick="applyAiPrompt()" class="btn-sm" style="width:100%; justify-content:center; background: rgba(59,130,246,0.2); color: #60a5fa; border-color: rgba(59,130,246,0.4);">
-                        <i class="ph ph-magic-wand"></i> Usar esta Personalidad para el Bot
-                    </button>
-                </div>
                 <div class="form-group">
-                    <label>Nombre del producto *</label>
-                    <input type="text" id="pNombre" placeholder="Ej: L-Treonato de Magnesio">
+                    <label>Nombre de la propiedad *</label>
+                    <input type="text" id="pNombre" placeholder="Ej: Hermoso Apartamento Campestre">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Categoría</label>
-                        <input type="text" id="pCategoria" placeholder="Ej: Suplementos">
+                        <label>Ciudad</label>
+                        <input type="text" id="pCiudad" placeholder="Ej: Medellín">
+                    </div>
+                    <div class="form-group">
+                        <label>Barrio</label>
+                        <input type="text" id="pBarrio" placeholder="Ej: El Poblado">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Habitaciones</label>
+                        <input type="number" id="pHabitaciones" placeholder="3">
+                    </div>
+                    <div class="form-group">
+                        <label>Baños</label>
+                        <input type="text" id="pBanos" placeholder="Ej: 2.5">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Pisos</label>
+                        <input type="number" id="pPisos" placeholder="1">
                     </div>
                     <div class="form-group">
                         <label>Precio (COP)</label>
-                        <input type="number" id="pPrecio" placeholder="89900">
+                        <input type="number" id="pPrecio" placeholder="350000000">
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Descripción corta</label>
-                    <input type="text" id="pDescCorta" placeholder="Breve resumen del producto">
-                </div>
-                <div class="form-group">
-                    <label>Descripción larga</label>
-                    <textarea id="pDescLarga" placeholder="Descripción detallada, beneficios, ingredientes, etc."></textarea>
-                </div>
-                <div class="form-group">
-                    <label>🔗 Link del producto (URL de compra/landing)</label>
-                    <input type="url" id="pLink" placeholder="https://vidasanas.online/#pedido">
-                </div>
-                <div class="form-group">
-                    <label>📷 URL de Imagen (opcional)</label>
-                    <input type="url" id="pImagen" placeholder="https://ejemplo.com/imagen.jpg">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Stock</label>
-                        <input type="number" id="pStock" placeholder="100">
+                        <label>Metros Cuadrados</label>
+                        <input type="number" id="pMetros" placeholder="98">
                     </div>
                     <div class="form-group">
-                        <label>Estado</label>
-                        <select id="pActivo">
-                            <option value="1">✅ Activo (visible)</option>
-                            <option value="0">🚫 Inactivo (oculto)</option>
-                        </select>
+                        <label>Referencia</label>
+                        <input type="text" id="pReferencia" placeholder="Ej: AP-102">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Tags (separados por coma)</label>
-                    <input type="text" id="pTags" placeholder="magnesio, sueño, memoria, suplemento">
+                    <label>Subir Fotos (múltiple)</label>
+                    <input type="file" id="pFotos" multiple accept="image/*">
+                </div>
+                <div class="form-group">
+                    <label>Características</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="pCaracteristicaInput" placeholder="Ej: Balcón, Ascensor, Vigilancia 24/7" style="flex: 1;">
+                        <button type="button" onclick="addCaracteristica()" class="btn-primary" style="padding: 0 16px;">
+                            Agregar
+                        </button>
+                    </div>
+                    <div id="pCaracteristicasContainer" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
+                    <input type="hidden" id="pCaracteristicas">
                 </div>
             </div>
             <div class="modal-footer">
@@ -789,48 +770,6 @@
         </div>
     </div>
 
-    <!-- ───── MODAL USUARIO ───── -->
-    <div class="modal-overlay hidden" id="userModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 id="userModalTitle">Nuevo Usuario</h3>
-                <button class="btn-icon" onclick="closeUserModal()"><i class="ph ph-x"></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Nombre de Usuario *</label>
-                    <input type="text" id="uUsername" placeholder="Ej: admin_andres">
-                </div>
-                <div class="form-group">
-                    <label>Contraseña *</label>
-                    <input type="password" id="uPassword" placeholder="******">
-                </div>
-                <div class="form-group">
-                    <label>Rol</label>
-                    <select id="uRole" onchange="document.getElementById('uStoreGroup').style.display = this.value === 'superadmin' ? 'none' : 'block'">
-                        <option value="store_owner">Dueño de Tienda</option>
-                        <option value="superadmin">SuperAdmin</option>
-                    </select>
-                </div>
-                <div class="form-group" id="uStoreGroup">
-                    <label>Asignar a Tienda (Solo para dueños)</label>
-                    <select id="uStoreId">
-                        <option value="">Selecciona una tienda</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-cancel" onclick="closeUserModal()">Cancelar</button>
-                <button class="btn-primary" onclick="saveUser()">Crear Usuario</button>
-            </div>
-        </div>
-    </div>
-
-                <button class="btn-primary" onclick="saveUser()">Crear Usuario</button>
-            </div>
-        </div>
-    </div>
-
     <style>@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }</style>
 
     <script>
@@ -852,6 +791,46 @@
     let allStores = [];
     let activeSessionId = null;
     let editingProductId = null;
+    let currentCaracteristicas = [];
+    let currentImagenes = [];
+
+    function addCaracteristica() {
+        const input = document.getElementById('pCaracteristicaInput');
+        if (!input) return;
+        const val = input.value.trim();
+        if (!val) return;
+        if (!currentCaracteristicas.includes(val)) {
+            currentCaracteristicas.push(val);
+            renderCaracteristicas();
+        }
+        input.value = '';
+    }
+
+    function removeCaracteristica(index) {
+        currentCaracteristicas.splice(index, 1);
+        renderCaracteristicas();
+    }
+
+    function renderCaracteristicas() {
+        const container = document.getElementById('pCaracteristicasContainer');
+        if (!container) return;
+        container.innerHTML = '';
+        currentCaracteristicas.forEach((c, index) => {
+            const badge = document.createElement('span');
+            badge.className = 'card-badge badge-active';
+            badge.style.display = 'inline-flex';
+            badge.style.alignItems = 'center';
+            badge.style.gap = '4px';
+            badge.style.cursor = 'default';
+            badge.style.textTransform = 'none';
+            badge.innerHTML = `${escapeHTML(c)} <i class="ph ph-x" style="cursor:pointer;" onclick="removeCaracteristica(${index})"></i>`;
+            container.appendChild(badge);
+        });
+        const hiddenInput = document.getElementById('pCaracteristicas');
+        if (hiddenInput) {
+            hiddenInput.value = JSON.stringify(currentCaracteristicas);
+        }
+    }
 
     function escapeHTML(str) {
         if (!str) return '';
@@ -1029,10 +1008,10 @@
         const statusEl = document.getElementById('chatStatusText');
         const btnToggle = document.getElementById('btnToggleBot');
         if (isPaused) {
-            statusEl.innerHTML = '<span class="dot" style="background:var(--yellow);"></span> Bot Pausado — respondiendo t\u00fa';
+            statusEl.innerHTML = '<span class="dot" style="background:var(--yellow);"></span> Bot Pausado — respondiendo tú';
             btnToggle.style.display = 'flex';
         } else {
-            statusEl.innerHTML = '<span class="dot"></span> Interacci\u00f3n Reciente';
+            statusEl.innerHTML = '<span class="dot"></span> Interacción Reciente';
             btnToggle.style.display = 'none';
         }
 
@@ -1224,31 +1203,66 @@
         const grid = document.getElementById('productsGrid');
         grid.innerHTML = '';
         if (allProducts.length === 0) {
-            grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:60px;"><div class="empty-icon"><i class="ph ph-storefront"></i></div><h3>Sin productos</h3><p>Agrega tu primer producto con el botón de arriba.</p></div>';
+            grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:60px;"><div class="empty-icon"><i class="ph ph-buildings"></i></div><h3>Sin propiedades</h3><p>Agrega tu primera propiedad con el botón de arriba.</p></div>';
             return;
         }
         allProducts.forEach(p => {
             const card = document.createElement('div');
             card.className = 'product-card';
+            card.style.cssText = 'padding: 0; overflow: hidden; display: grid; grid-template-columns: 140px 1fr; min-height: 110px;';
+
             const priceStr = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(p.precio);
+
+            const firstPhoto = (Array.isArray(p.imagenes) && p.imagenes.length > 0) ? p.imagenes[0] : (p.imagen_url || '');
+            const imgHTML = firstPhoto
+                ? `<img src="${firstPhoto}" alt="${escapeHTML(p.nombre)}" style="width:140px;height:100%;object-fit:cover;display:block;">`
+                : `<div style="width:140px;height:100%;min-height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.03);color:var(--text3);gap:4px;">
+                    <i class="ph ph-image" style="font-size:24px;"></i>
+                    <span style="font-size:10px;">Sin foto</span>
+                </div>`;
+
             card.innerHTML = `
-                <div class="card-top">
-                    <div class="card-name">${escapeHTML(p.nombre)}</div>
-                    <span class="card-badge ${p.activo ? 'badge-active' : 'badge-inactive'}">${p.activo ? 'Activo' : 'Inactivo'}</span>
-                </div>
-                <div class="card-category"><i class="ph ph-tag" style="vertical-align:middle;margin-right:2px;"></i> ${escapeHTML(p.categoria || 'Sin categoría')}</div>
-                <div class="card-desc">${escapeHTML(p.descripcion_corta || p.descripcion_larga || 'Sin descripción')}</div>
-                <div class="card-meta">
-                    <div class="meta-item"><span class="meta-label">Precio</span><span class="meta-value">${priceStr}</span></div>
-                    <div class="meta-item"><span class="meta-label">Stock</span><span class="meta-value ${p.stock === 0 ? 'stock-zero' : ''}">${p.stock}</span></div>
-                    <div class="meta-item"><span class="meta-label">Tags</span><span class="meta-value" style="font-size:11px;color:var(--text2);">${escapeHTML((p.tags || []).slice(0,3).join(', ')) || '—'}</span></div>
-                </div>
-                ${p.link ? `<a href="${escapeHTML(p.link)}" target="_blank" class="card-link"><i class="ph ph-link"></i> ${escapeHTML(p.link.length > 45 ? p.link.substring(0,45)+'…' : p.link)}</a>` : '<div class="card-no-link">Sin link de producto</div>'}
-                <div class="card-actions">
-                    <button class="btn-sm" onclick='editProduct("${p.id}")'><i class="ph ph-pencil-simple"></i> Editar</button>
-                    <button class="btn-sm danger" onclick='confirmDelete("${p.id}", "${escapeHTML(p.nombre).replace(/'/g,"\\'")}", "${p.storeId}");'><i class="ph ph-trash"></i> Eliminar</button>
+                ${imgHTML}
+                <div style="display:grid; grid-template-rows:auto auto 1fr; padding:12px 14px; gap:6px; min-width:0;">
+
+                    <!-- Fila 1: Nombre + Referencia -->
+                    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:6px;">
+                        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="${escapeHTML(p.nombre)}">
+                            ${escapeHTML(p.nombre)}
+                        </span>
+                    </div>
+
+                    <!-- Fila 2: Precio + iconos -->
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                        <span style="font-size:15px;font-weight:700;color:var(--brand);">${priceStr}</span>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;color:var(--text3);font-size:11px;">
+                            ${p.habitaciones    ? `<span><i class="ph ph-bed" style="vertical-align:middle;"></i> ${p.habitaciones}</span>` : ''}
+                            ${p.baños           ? `<span><i class="ph ph-shower" style="vertical-align:middle;"></i> ${p.baños}</span>` : ''}
+                            ${p.metros_cuadrados ? `<span><i class="ph ph-ruler" style="vertical-align:middle;"></i> ${p.metros_cuadrados}m²</span>` : ''}
+                            ${p.ciudad          ? `<span><i class="ph ph-map-pin" style="vertical-align:middle;"></i> ${escapeHTML(p.ciudad)}</span>` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Fila 3: Botones alineados al fondo -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-self:end;">
+                        <button class="btn-sm btn-edit" style="justify-content:center;">
+                            <i class="ph ph-pencil-simple"></i> Editar
+                        </button>
+                        <button class="btn-sm danger btn-delete" style="justify-content:center;">
+                            <i class="ph ph-trash"></i> Eliminar
+                        </button>
+                    </div>
+
                 </div>
             `;
+            
+            // Asignar listeners dinámicos para evitar errores de sintaxis y escaping
+            const editBtn = card.querySelector('.btn-edit');
+            if (editBtn) editBtn.onclick = () => editProduct(p.id);
+
+            const deleteBtn = card.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.onclick = () => confirmDelete(p.id, p.nombre, p.storeId);
+
             grid.appendChild(card);
         });
     }
@@ -1256,28 +1270,31 @@
     // ── Modal ──
     function openProductModal() {
         editingProductId = null;
-        document.getElementById('modalTitle').textContent = 'Nuevo Producto';
+        document.getElementById('modalTitle').textContent = 'Nueva Propiedad';
         document.getElementById('pId').value = '';
         document.getElementById('pNombre').value = '';
-        document.getElementById('pCategoria').value = '';
+        document.getElementById('pCiudad').value = '';
+        document.getElementById('pBarrio').value = '';
+        document.getElementById('pHabitaciones').value = '';
+        document.getElementById('pBanos').value = '';
+        document.getElementById('pPisos').value = '';
         document.getElementById('pPrecio').value = '';
-        document.getElementById('pDescCorta').value = '';
-        document.getElementById('pDescLarga').value = '';
-        document.getElementById('pLink').value = '';
-        document.getElementById('pImagen').value = '';
-        document.getElementById('pStock').value = '';
-        document.getElementById('pActivo').value = '1';
-        document.getElementById('pTags').value = '';
+        document.getElementById('pMetros').value = '';
+        document.getElementById('pReferencia').value = '';
+        document.getElementById('pFotos').value = '';
         
-        // Reset AI suggestion
-        document.getElementById('aiPromptContainer').style.display = 'none';
-        document.getElementById('pAiPromptText').textContent = '';
-        window.lastAiPrompt = null;
+        currentCaracteristicas = [];
+        renderCaracteristicas();
+        
+        currentImagenes = [];
 
         // Pre-seleccionar la tienda si hay un filtro activo
-        const filterVal = document.getElementById('productStoreFilter').value;
+        const productStoreFilter = document.getElementById('productStoreFilter');
+        const filterVal = productStoreFilter ? productStoreFilter.value : '';
         if (filterVal) {
             document.getElementById('pStoreId').value = filterVal;
+        } else if (allStores.length === 1) {
+            document.getElementById('pStoreId').value = allStores[0].id;
         }
         document.getElementById('pStoreId').disabled = false;
         
@@ -1288,20 +1305,25 @@
         const p = allProducts.find(x => x.id === id);
         if (!p) return;
         editingProductId = id;
-        document.getElementById('modalTitle').textContent = 'Editar Producto';
+        document.getElementById('modalTitle').textContent = 'Editar Propiedad';
         document.getElementById('pId').value = p.id;
-        document.getElementById('pNombre').value = p.nombre;
-        document.getElementById('pCategoria').value = p.categoria;
-        document.getElementById('pPrecio').value = p.precio;
-        document.getElementById('pDescCorta').value = p.descripcion_corta;
-        document.getElementById('pDescLarga').value = p.descripcion_larga;
-        document.getElementById('pLink').value = p.link || '';
-        document.getElementById('pImagen').value = p.imagen_url || '';
-        document.getElementById('pStock').value = p.stock;
-        document.getElementById('pActivo').value = p.activo ? '1' : '0';
-        document.getElementById('pTags').value = (p.tags || []).join(', ');
+        document.getElementById('pNombre').value = p.nombre || '';
+        document.getElementById('pCiudad').value = p.ciudad || '';
+        document.getElementById('pBarrio').value = p.barrio || '';
+        document.getElementById('pHabitaciones').value = p.habitaciones || '';
+        document.getElementById('pBanos').value = p.baños || '';
+        document.getElementById('pPisos').value = p.pisos || '';
+        document.getElementById('pPrecio').value = p.precio || '';
+        document.getElementById('pMetros').value = p.metros_cuadrados || '';
+        document.getElementById('pReferencia').value = p.referencia || '';
+        document.getElementById('pFotos').value = '';
         
-        // Fijar la tienda (no se suele cambiar la tienda de un producto)
+        currentCaracteristicas = Array.isArray(p.caracteristicas) ? [...p.caracteristicas] : [];
+        renderCaracteristicas();
+        
+        currentImagenes = Array.isArray(p.imagenes) ? [...p.imagenes] : [];
+
+        // Fijar la tienda
         document.getElementById('pStoreId').value = p.storeId;
         document.getElementById('pStoreId').disabled = true;
 
@@ -1317,20 +1339,51 @@
         const storeId = document.getElementById('pStoreId').value;
         
         if (!nombre) { alert('El nombre es obligatorio'); return; }
-        if (!storeId) { alert('Debes asignar el producto a una tienda'); return; }
+        if (!storeId) { alert('Debes asignar la propiedad a una tienda'); return; }
+
+        // Procesar imágenes seleccionadas
+        const fileInput = document.getElementById('pFotos');
+        let imagenes = [...currentImagenes];
+        if (fileInput && fileInput.files.length > 0) {
+            const filePromises = Array.from(fileInput.files).map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(file);
+                });
+            });
+            const base64Files = await Promise.all(filePromises);
+            imagenes = [...imagenes, ...base64Files];
+        }
+
+        let referencia = document.getElementById('pReferencia').value.trim();
+        if (!referencia) {
+            referencia = 'SIS' + Math.floor(1000 + Math.random() * 9000);
+        }
 
         const body = {
             nombre,
             storeId,
-            categoria: document.getElementById('pCategoria').value.trim(),
+            ciudad: document.getElementById('pCiudad').value.trim(),
+            barrio: document.getElementById('pBarrio').value.trim(),
+            habitaciones: parseInt(document.getElementById('pHabitaciones').value) || 0,
+            baños: document.getElementById('pBanos').value.trim(),
+            pisos: parseInt(document.getElementById('pPisos').value) || 0,
             precio: parseFloat(document.getElementById('pPrecio').value) || 0,
-            descripcion_corta: document.getElementById('pDescCorta').value.trim(),
-            descripcion_larga: document.getElementById('pDescLarga').value.trim(),
-            link: document.getElementById('pLink').value.trim(),
-            imagen_url: document.getElementById('pImagen').value.trim(),
-            stock: parseInt(document.getElementById('pStock').value) || 0,
-            activo: document.getElementById('pActivo').value === '1',
-            tags: document.getElementById('pTags').value.split(',').map(t => t.trim()).filter(Boolean)
+            metros_cuadrados: parseFloat(document.getElementById('pMetros').value) || 0,
+            caracteristicas: currentCaracteristicas,
+            referencia: referencia,
+            imagenes: imagenes,
+            
+            // Campos de compatibilidad con backend heredado (si aplica)
+            categoria: 'propiedad',
+            descripcion_corta: document.getElementById('pBarrio').value.trim(),
+            descripcion_larga: currentCaracteristicas.join(', '),
+            link: '',
+            imagen_url: imagenes[0] || '',
+            stock: 1,
+            activo: true,
+            tags: currentCaracteristicas
         };
 
         try {
@@ -1351,23 +1404,27 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.error || 'Error al guardar el producto');
+                throw new Error(err.error || 'Error al guardar la propiedad');
             }
 
             closeProductModal();
             await loadProducts();
         } catch (e) {
-            alert('Error guardando producto: ' + e.message);
+            alert('Error guardando propiedad: ' + e.message);
         }
     }
 
     async function confirmDelete(id, nombre, storeId) {
         if (!confirm(`¿Eliminar "${nombre}" del catálogo? Esta acción no se puede deshacer.`)) return;
         try {
-            await fetch(`/dashboard/api/products/${id}?storeId=${storeId}`, { method: 'DELETE' });
+            const res = await fetch(`/dashboard/api/products/${id}?storeId=${storeId}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'Error en la respuesta del servidor');
+            }
             await loadProducts();
         } catch (e) {
-            alert('Error eliminando producto');
+            alert('Error eliminando producto: ' + e.message);
         }
     }
 
@@ -1390,26 +1447,26 @@
         const prodSelect = document.getElementById('productStoreFilter');
         const modalSelect = document.getElementById('pStoreId');
         
-        if (!chatSelect || !prodSelect || !modalSelect) return;
+        if (!modalSelect) return;
         
-        const currentChatVal = chatSelect.value;
-        const currentProdVal = prodSelect.value;
+        const currentChatVal = chatSelect ? chatSelect.value : '';
+        const currentProdVal = prodSelect ? prodSelect.value : '';
         
-        chatSelect.innerHTML = '<option value="">Todos los bots</option>';
-        prodSelect.innerHTML = '<option value="">Todas las tiendas</option>';
+        if (chatSelect) chatSelect.innerHTML = '<option value="">Todos los bots</option>';
+        if (prodSelect) prodSelect.innerHTML = '<option value="">Todas las tiendas</option>';
         modalSelect.innerHTML = '<option value="">-- Seleccionar Tienda --</option>';
         
         allStores.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.id;
             opt.textContent = s.name;
-            chatSelect.appendChild(opt.cloneNode(true));
-            prodSelect.appendChild(opt.cloneNode(true));
+            if (chatSelect) chatSelect.appendChild(opt.cloneNode(true));
+            if (prodSelect) prodSelect.appendChild(opt.cloneNode(true));
             modalSelect.appendChild(opt.cloneNode(true));
         });
         
-        chatSelect.value = currentChatVal;
-        prodSelect.value = currentProdVal;
+        if (chatSelect) chatSelect.value = currentChatVal;
+        if (prodSelect) prodSelect.value = currentProdVal;
     }
 
     function renderBots() {
@@ -1431,6 +1488,15 @@
                 <div id="connected-area-${s.id}" style="display:none; text-align:center; padding:20px;">
                     <i class="ph ph-check-circle" style="font-size:48px; color:var(--brand);"></i>
                     <p style="margin-top:10px; font-weight:600;">Bot Conectado</p>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.03);">
+                    <i class="ph ph-calendar-check" style="font-size:18px;color:var(--brand);margin-top:1px;"></i>
+                    <div style="min-width:0;">
+                        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Google Calendar</div>
+                        <div style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(s.adminCalendarEmail || '')}">
+                            ${s.adminCalendarEmail ? escapeHTML(s.adminCalendarEmail) : 'Sin correo configurado'}
+                        </div>
+                    </div>
                 </div>
                 <div id="start-btn-area-${s.id}" style="margin-top: auto; margin-bottom: 10px;">
                     <button class="btn-primary" style="width: 100%; justify-content: center;" onclick="startBot('${s.id}')">Iniciar Bot / Conectar</button>
@@ -1524,6 +1590,7 @@
         document.getElementById('sPhoneNumberId').value = s.whatsappPhoneNumberId || '';
         document.getElementById('sAccessToken').value = s.whatsappAccessToken || '';
         document.getElementById('sPqrEmail').value = s.pqrEmail || '';
+        document.getElementById('sAdminCalendarEmail').value = s.adminCalendarEmail || '';
         document.getElementById('sTelegramToken').value = s.telegramToken || '';
         document.getElementById('sTelegramActive').checked = !!s.telegramBotActive;
         document.getElementById('btnSaveStore').textContent = 'Guardar Cambios';
@@ -1541,6 +1608,7 @@
         document.getElementById('sPhoneNumberId').value = '';
         document.getElementById('sAccessToken').value = '';
         document.getElementById('sPqrEmail').value = '';
+        document.getElementById('sAdminCalendarEmail').value = '';
         document.getElementById('sTelegramToken').value = '';
         document.getElementById('sTelegramActive').checked = false;
         document.getElementById('btnSaveStore').textContent = 'Guardar y Crear';
@@ -1563,6 +1631,7 @@
                 whatsappPhoneNumberId: document.getElementById('sPhoneNumberId').value.trim() || null,
                 whatsappAccessToken: document.getElementById('sAccessToken').value.trim() || null,
                 pqrEmail: document.getElementById('sPqrEmail').value.trim() || null,
+                adminCalendarEmail: document.getElementById('sAdminCalendarEmail').value.trim() || null,
                 telegramToken: document.getElementById('sTelegramToken').value.trim() || null,
                 telegramBotActive: document.getElementById('sTelegramActive').checked,
                 isActive: true
@@ -1728,6 +1797,6 @@
     }
     
     initDashboard();
-    </script>
+</script>
 </body>
 </html>

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS "stores" (
 	"whatsapp_phone_number_id" text,
 	"whatsapp_access_token" text,
 	"openai_api_key" text,
+	"admin_calendar_email" text,
 	"system_prompt" text NOT NULL,
 	"is_active" boolean DEFAULT true,
 	"created_at" timestamp DEFAULT now(),

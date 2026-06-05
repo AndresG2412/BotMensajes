@@ -43,9 +43,9 @@ dashboardRouter.post('/api/users', checkSuperAdmin, async (req: Request, res: Re
     try {
         const { username, password, storeId, role } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'Usuario y contraseña obligatorios' });
-        
+
         const hashedPass = crypto.createHash('sha256').update(password).digest('hex');
-        
+
         const newUser = await db.insert(users).values({
             id: Date.now().toString(),
             username,
@@ -53,7 +53,7 @@ dashboardRouter.post('/api/users', checkSuperAdmin, async (req: Request, res: Re
             storeId: storeId || null,
             role: role || 'store_owner'
         }).returning();
-        
+
         res.status(201).json({ id: newUser[0].id, username: newUser[0].username, role: newUser[0].role });
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -90,7 +90,7 @@ dashboardRouter.get('/api/stores', async (req: any, res: Response) => {
 // Crear una nueva tienda (Añadir Bot)
 dashboardRouter.post('/api/stores', checkSuperAdmin, async (req: Request, res: Response) => {
     try {
-        const { id, name, systemPrompt, openaiApiKey, pqrEmail, telegramToken, telegramBotActive } = req.body;
+        const { id, name, systemPrompt, openaiApiKey, pqrEmail, adminCalendarEmail, telegramToken, telegramBotActive } = req.body;
         if (!id || !name) {
             return res.status(400).json({ error: 'ID y Nombre son obligatorios' });
         }
@@ -101,6 +101,7 @@ dashboardRouter.post('/api/stores', checkSuperAdmin, async (req: Request, res: R
             systemPrompt: systemPrompt || DEFAULT_STORE_SYSTEM_PROMPT,
             openaiApiKey: openaiApiKey || null,
             pqrEmail: pqrEmail || null,
+            adminCalendarEmail: adminCalendarEmail || null,
             telegramToken: telegramToken || null,
             telegramBotActive: !!telegramBotActive,
             isActive: true
@@ -116,13 +117,13 @@ dashboardRouter.post('/api/stores', checkSuperAdmin, async (req: Request, res: R
 dashboardRouter.delete('/api/stores/:id', checkSuperAdmin, async (req: Request, res: Response) => {
     try {
         const id = req.params.id as string;
-        
+
         // Primero apagamos el bot si está corriendo
         await stopBotInstance(id);
-        
+
         // Luego borramos de la BD
         await db.delete(stores).where(eq(stores.id, id));
-        
+
         res.json({ success: true, message: `Tienda ${id} eliminada correctamente` });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -137,7 +138,7 @@ dashboardRouter.put('/api/stores/:id', async (req: any, res: Response) => {
             return res.status(403).json({ error: 'No tienes permiso para modificar esta tienda' });
         }
 
-        const { name, systemPrompt, openaiApiKey, isActive, whatsappPhoneNumberId, whatsappAccessToken, pqrEmail, telegramToken, telegramBotActive } = req.body;
+        const { name, systemPrompt, openaiApiKey, isActive, whatsappPhoneNumberId, whatsappAccessToken, pqrEmail, adminCalendarEmail, telegramToken, telegramBotActive } = req.body;
 
         if (!name) return res.status(400).json({ error: 'El nombre es obligatorio' });
         if (!systemPrompt) return res.status(400).json({ error: 'El System Prompt es obligatorio' });
@@ -148,6 +149,7 @@ dashboardRouter.put('/api/stores/:id', async (req: any, res: Response) => {
                 systemPrompt,
                 openaiApiKey: openaiApiKey || null,
                 pqrEmail: pqrEmail || null,
+                adminCalendarEmail: adminCalendarEmail || null,
                 telegramToken: telegramToken || null,
                 telegramBotActive: !!telegramBotActive,
                 isActive,
@@ -208,7 +210,7 @@ dashboardRouter.get('/api/products', async (req: any, res: Response) => {
     const storeId = isSuperAdmin(req) ? req.query.storeId as string | undefined : req.user.storeId;
     if (!storeId && !isSuperAdmin(req)) return res.status(400).json({ error: 'storeId es obligatorio' });
     const products = await getAllProducts(storeId);
-    
+
     // Mapear schema DB a JSON que espera el Frontend
     const mappedProducts = products.map(p => ({
         id: p.id,
@@ -219,11 +221,21 @@ dashboardRouter.get('/api/products', async (req: any, res: Response) => {
         categoria: p.productType,
         precio: p.price,
         imagen_url: p.imageUrl,
-        link: p.checkoutUrl,
         stock: 100, // No está en la BD actualmente
-        activo: true // No está en la BD actualmente
+        activo: true, // No está en la BD actualmente
+        // Campos específicos de propiedades
+        barrio: p.barrio || '',
+        baños: p.baños || '',
+        caracteristicas: p.caracteristicas || [],
+        ciudad: p.ciudad || '',
+        habitaciones: p.habitaciones || 0,
+        metros_cuadrados: p.metros_cuadrados || 0,
+        pisos: p.pisos || 0,
+        referencia: p.referencia || p.id,
+        imagenes: p.imagenes || [],
+        folderCloudinary: p.folderCloudinary || ''
     }));
-    
+
     res.json(mappedProducts);
 });
 
@@ -234,7 +246,7 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
         if (!storeId) {
             return res.status(400).json({ error: 'El storeId es obligatorio' });
         }
-        
+
         // Mapear desde JSON Frontend a schema DB
         const productData = {
             name: req.body.nombre,
@@ -242,7 +254,17 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
             productType: req.body.categoria || 'physical',
             price: req.body.precio,
             imageUrl: req.body.imagen_url,
-            checkoutUrl: req.body.link
+            // Campos específicos de propiedades
+            barrio: req.body.barrio || '',
+            baños: req.body.baños || '',
+            caracteristicas: req.body.caracteristicas || [],
+            ciudad: req.body.ciudad || '',
+            habitaciones: parseInt(req.body.habitaciones) || 0,
+            metros_cuadrados: parseFloat(req.body.metros_cuadrados) || 0,
+            pisos: parseInt(req.body.pisos) || 0,
+            referencia: req.body.referencia || '',
+            imagenes: req.body.imagenes || [],
+            folderCloudinary: req.body.folderCloudinary || ''
         };
 
         const product = await createProduct(productData, storeId);
@@ -268,7 +290,17 @@ dashboardRouter.put('/api/products/:id', async (req: any, res: Response) => {
             productType: req.body.categoria,
             price: req.body.precio,
             imageUrl: req.body.imagen_url,
-            checkoutUrl: req.body.link
+            // Campos específicos de propiedades
+            barrio: req.body.barrio,
+            baños: req.body.baños,
+            caracteristicas: req.body.caracteristicas,
+            ciudad: req.body.ciudad,
+            habitaciones: req.body.habitaciones !== undefined ? parseInt(req.body.habitaciones) : undefined,
+            metros_cuadrados: req.body.metros_cuadrados !== undefined ? parseFloat(req.body.metros_cuadrados) : undefined,
+            pisos: req.body.pisos !== undefined ? parseInt(req.body.pisos) : undefined,
+            referencia: req.body.referencia,
+            imagenes: req.body.imagenes,
+            folderCloudinary: req.body.folderCloudinary
         };
 
         const updated = await updateProduct(id, productData, storeId);
@@ -316,15 +348,15 @@ dashboardRouter.post('/api/products/extract', async (req: Request, res: Response
             if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
                 return res.status(400).json({ error: 'Protocolo no permitido' });
             }
-            
+
             // Resolver DNS manualmente
             const dns = require('dns').promises;
             const lookup = await dns.lookup(parsedUrl.hostname);
             const ip = lookup.address;
-            
+
             // Expresión regular para detectar IPs privadas, loopback, link-local, etc.
             const isPrivateIP = /(^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.)|(^169\.254\.)/.test(ip);
-            
+
             if (isPrivateIP || ip === '0.0.0.0' || parsedUrl.hostname.endsWith('.internal')) {
                 return res.status(400).json({ error: 'URL no permitida por seguridad (SSRF)' });
             }
@@ -335,7 +367,7 @@ dashboardRouter.post('/api/products/extract', async (req: Request, res: Response
 
         let response;
         try {
-            response = await axios.get(url, { 
+            response = await axios.get(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0' },
                 timeout: 10000, // Timeout de 10s
                 maxRedirects: 0 // NO seguir redirecciones para evitar Bypass SSRF
@@ -374,10 +406,10 @@ dashboardRouter.post('/api/products/extract', async (req: Request, res: Response
                     { role: 'user', content: prompt }
                 ]
             };
-            
+
             // Si el modelo lo soporta (OpenAI nativo o Ollama reciente), fuerza el formato JSON
             if (config.OPENAI_MODEL.includes('gpt') || config.OPENAI_MODEL.includes('llama') || config.OPENAI_MODEL.includes('phi')) {
-                 aiParams.response_format = { type: "json_object" };
+                aiParams.response_format = { type: "json_object" };
             }
 
             aiResponse = await openai.chat.completions.create(aiParams);
@@ -391,7 +423,7 @@ dashboardRouter.post('/api/products/extract', async (req: Request, res: Response
         }
 
         const rawContent = aiResponse.choices[0].message.content || '';
-        
+
         // Si el contenido indica error de cuota o está vacío
         if (!rawContent || rawContent.includes('Demasiadas solicitudes') || rawContent.includes('Too many requests')) {
             throw new Error('Límite de cuota de IA alcanzado. Por favor, intenta de nuevo en unos minutos.');
@@ -430,7 +462,7 @@ dashboardRouter.post('/api/reply', async (req: any, res: Response) => {
             res.status(400).json({ error: 'Falta teléfono, mensaje o storeId' });
             return;
         }
-        
+
         if (sessionId) {
             await pauseChat(sessionId);
 
@@ -443,7 +475,7 @@ dashboardRouter.post('/api/reply', async (req: any, res: Response) => {
                 logger.error(`Error guardando mensaje de admin en historial: ${e.message}`);
             }
         }
-        
+
         await sendWhatsAppMessage(storeId, phone, message);
         res.json({ success: true, botPaused: true });
     } catch (error: any) {
@@ -466,9 +498,9 @@ dashboardRouter.post('/api/resume', async (req: any, res: Response) => {
         if (parts.length >= 2) {
             const storeId = parts[0];
             const phone = parts.slice(1).join('_');
-            
+
             // Verificamos de forma asíncrona si hay mensajes del usuario sin contestar y los procesamos
-            processUnansweredMessage(sessionId, storeId, phone).catch(err => 
+            processUnansweredMessage(sessionId, storeId, phone).catch(err =>
                 logger.error(`Error en processUnansweredMessage manual: ${err.message}`)
             );
         }
