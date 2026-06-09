@@ -18,7 +18,10 @@ export const config = {
     META_VERIFY_TOKEN: process.env.META_VERIFY_TOKEN || 'mi_token_secreto_ecommerce',
     NGROK_AUTHTOKEN: process.env.NGROK_AUTHTOKEN || '',
     NGROK_DOMAIN: process.env.NGROK_DOMAIN || '',
-    JWT_SECRET: process.env.JWT_SECRET || 'super-secreto-ai-bot-99'
+    JWT_SECRET: process.env.JWT_SECRET || 'super-secreto-ai-bot-99',
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
 };
 
 // Validación simple

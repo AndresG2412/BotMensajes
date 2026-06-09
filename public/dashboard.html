@@ -3,512 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Control - E-Commerce Bot</title>
+    <title>Panel de Control - Bot de Tienda</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        :root {
-            --bg: #0B0F19;
-            --panel: #151C2C;
-            --panel2: #1E293B;
-            --border: #2A3441;
-            --brand: #10b981;
-            --brand-dark: #059669;
-            --brand-glow: rgba(16, 185, 129, 0.15);
-            --red: #ef4444;
-            --red-glow: rgba(239, 68, 68, 0.15);
-            --yellow: #f59e0b;
-            --text: #F8FAFC;
-            --text2: #94A3B8;
-            --text3: #64748B;
-        }
-
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: var(--bg);
-            color: var(--text); 
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* ───── GLASS ───── */
-        .glass {
-            background: rgba(21, 28, 44, 0.75);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        /* ───── HEADER ───── */
-        header {
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 24px;
-            border-bottom: 1px solid var(--border);
-            flex-shrink: 0;
-            z-index: 20;
-        }
-        .logo { display: flex; align-items: center; gap: 12px; }
-        .logo-icon {
-            width: 36px; height: 36px; border-radius: 10px;
-            background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 14px rgba(16,185,129,0.25);
-        }
-        .logo-icon i { font-size: 20px; color: #fff; }
-        .logo-text h1 { font-size: 16px; font-weight: 700; }
-        .logo-text span { font-size: 10px; color: var(--brand); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
-
-        /* ───── TAB BAR ───── */
-        .tabs {
-            display: flex;
-            gap: 4px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 10px;
-            padding: 4px;
-        }
-        .tab-btn {
-            padding: 8px 20px;
-            border: none;
-            background: transparent;
-            color: var(--text3);
-            font-size: 13px;
-            font-weight: 500;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-family: 'Inter', sans-serif;
-        }
-        .tab-btn:hover { color: var(--text2); background: rgba(255,255,255,0.03); }
-        .tab-btn.active { 
-            color: var(--text); 
-            background: var(--panel2); 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-        .tab-btn .badge {
-            background: var(--brand);
-            color: #fff;
-            font-size: 10px;
-            padding: 1px 7px;
-            border-radius: 99px;
-            font-weight: 700;
-        }
-
-        /* ───── HEADER ACTIONS ───── */
-        .header-actions { display: flex; align-items: center; gap: 8px; }
-        .btn-icon {
-            width: 36px; height: 36px; border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(255,255,255,0.03);
-            color: var(--text2);
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.2s;
-            font-size: 18px;
-        }
-        .btn-icon:hover { background: rgba(255,255,255,0.08); color: var(--text); }
-
-        /* ───── MAIN CONTENT ───── */
-        main {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-        }
-        .tab-page { display: none; height: 100%; }
-        .tab-page.active { display: flex; }
-
-        /* ───── CHATS TAB ───── */
-        .chat-layout { display: flex; width: 100%; height: 100%; }
-        .sidebar {
-            width: 320px;
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            flex-shrink: 0;
-        }
-        .sidebar-search {
-            padding: 16px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .sidebar-search input {
-            width: 100%;
-            padding: 10px 14px 10px 36px;
-            background: rgba(0,0,0,0.25);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 8px;
-            color: var(--text);
-            font-size: 13px;
-            outline: none;
-            font-family: 'Inter', sans-serif;
-        }
-        .sidebar-search input:focus { border-color: var(--brand); }
-        .sidebar-search { position: relative; }
-        .sidebar-search i { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 16px; }
-        .sessions-list { flex: 1; overflow-y: auto; }
-
-        .session-item {
-            padding: 14px 16px;
-            cursor: pointer;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-            border-left: 3px solid transparent;
-            transition: all 0.15s;
-        }
-        .session-item:hover { background: rgba(255,255,255,0.02); border-left-color: var(--brand); }
-        .session-item.active { background: var(--brand-glow); border-left-color: var(--brand); }
-        .session-item .top { display: flex; justify-content: space-between; align-items: center; }
-        .session-item .phone { font-size: 13px; font-weight: 600; color: var(--text); }
-        .session-item .time { font-size: 10px; color: var(--text3); }
-        .session-item .preview { font-size: 12px; color: var(--text3); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* Chat Area */
-        .chat-area { flex: 1; display: flex; flex-direction: column; }
-        .chat-header {
-            height: 60px;
-            padding: 0 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border-bottom: 1px solid var(--border);
-        }
-        .chat-header .avatar {
-            width: 40px; height: 40px; border-radius: 50%;
-            background: var(--panel2);
-            border: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: center;
-        }
-        .chat-header .avatar i { font-size: 20px; color: var(--brand); }
-        .chat-header .info h3 { font-size: 14px; font-weight: 600; }
-        .chat-header .info span { font-size: 11px; color: var(--text3); display: flex; align-items: center; gap: 4px; }
-        .chat-header .info .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 8px rgba(16,185,129,0.7); }
-        
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .chat-input-area {
-            padding: 16px 24px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            gap: 12px;
-            background: rgba(0,0,0,0.1);
-        }
-        .chat-input-area input {
-            flex: 1;
-            padding: 12px 16px;
-            background: var(--panel2);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            color: var(--text);
-            outline: none;
-            font-family: 'Inter', sans-serif;
-        }
-        .chat-input-area input:focus { border-color: var(--brand); }
-        .chat-input-area button {
-            background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-            color: #fff;
-            border: none;
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            font-size: 18px;
-            transition: all 0.2s;
-            box-shadow: 0 4px 14px rgba(16,185,129,0.25);
-        }
-        .chat-input-area button:hover { transform: translateY(-2px); }
-
-        .msg { max-width: 70%; padding: 12px 16px; border-radius: 16px; font-size: 13px; line-height: 1.5; animation: fadeIn 0.25s ease-out; }
-        .msg.user {
-            align-self: flex-end;
-            background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-            color: #fff;
-            border-bottom-right-radius: 4px;
-            box-shadow: 0 4px 12px rgba(16,185,129,0.2);
-        }
-        .msg.assistant {
-            align-self: flex-start;
-            background: var(--panel2);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-bottom-left-radius: 4px;
-        }
-        .msg.tool-msg {
-            align-self: center;
-            background: rgba(0,0,0,0.3);
-            border: 1px dashed rgba(255,255,255,0.1);
-            color: var(--text3);
-            font-size: 11px;
-            padding: 6px 14px;
-            border-radius: 99px;
-            display: flex; align-items: center; gap: 6px;
-        }
-
-        .empty-state {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--text3);
-        }
-        .empty-icon {
-            width: 80px; height: 80px; border-radius: 20px;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.05);
-            display: flex; align-items: center; justify-content: center;
-            margin-bottom: 16px;
-        }
-        .empty-icon i { font-size: 36px; color: var(--text3); }
-        .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
-        .empty-state p { font-size: 13px; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* ───── PRODUCTS TAB ───── */
-        .products-layout { width: 100%; display: flex; flex-direction: column; overflow: hidden; }
-        .products-toolbar {
-            padding: 16px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--border);
-            flex-shrink: 0;
-        }
-        .products-toolbar h2 { font-size: 16px; font-weight: 600; }
-        .btn-primary {
-            padding: 9px 18px;
-            background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.2s;
-            box-shadow: 0 4px 14px rgba(16,185,129,0.25);
-        }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,0.35); }
-
-        .products-grid {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px 24px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 16px;
-            align-content: start;
-        }
-
-        .product-card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 20px;
-            transition: all 0.2s;
-            position: relative;
-            overflow: hidden;
-        }
-        .product-card:hover { border-color: rgba(255,255,255,0.12); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
-        .product-card .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-        .product-card .card-name { font-size: 15px; font-weight: 600; flex: 1; margin-right: 8px; }
-        .product-card .card-badge {
-            font-size: 10px;
-            padding: 3px 10px;
-            border-radius: 99px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            flex-shrink: 0;
-        }
-        .badge-active { background: var(--brand-glow); color: var(--brand); }
-        .badge-inactive { background: var(--red-glow); color: var(--red); }
-
-        .product-card .card-category { font-size: 11px; color: var(--text3); margin-bottom: 8px; }
-        .product-card .card-desc { font-size: 12px; color: var(--text2); line-height: 1.5; margin-bottom: 14px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        
-        .card-meta { display: flex; gap: 16px; margin-bottom: 14px; }
-        .card-meta .meta-item { display: flex; flex-direction: column; }
-        .card-meta .meta-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
-        .card-meta .meta-value { font-size: 14px; font-weight: 600; color: var(--brand); }
-        .card-meta .meta-value.stock-zero { color: var(--red); }
-
-        .card-link {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            color: var(--brand);
-            text-decoration: none;
-            padding: 6px 10px;
-            background: var(--brand-glow);
-            border-radius: 6px;
-            margin-bottom: 14px;
-            word-break: break-all;
-        }
-        .card-link:hover { background: rgba(16,185,129,0.25); }
-        .card-no-link { font-size: 11px; color: var(--text3); font-style: italic; margin-bottom: 14px; }
-
-        .card-actions { display: flex; gap: 8px; }
-        .btn-sm {
-            padding: 7px 14px;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.03);
-            color: var(--text2);
-            border-radius: 7px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.15s;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-family: 'Inter', sans-serif;
-        }
-        .btn-sm:hover { background: rgba(255,255,255,0.08); color: var(--text); }
-        .btn-sm.danger:hover { background: var(--red-glow); color: var(--red); border-color: rgba(239,68,68,0.3); }
-
-        /* ───── MODAL ───── */
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            animation: fadeIn 0.2s ease-out;
-        }
-        .modal-overlay.hidden { display: none; }
-        .modal {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            width: 520px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 24px 48px rgba(0,0,0,0.5);
-        }
-        .modal-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .modal-header h3 { font-size: 16px; font-weight: 600; }
-        .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
-        .form-group label { font-size: 12px; font-weight: 500; color: var(--text2); }
-        .form-group input, .form-group textarea, .form-group select {
-            padding: 10px 14px;
-            background: rgba(0,0,0,0.25);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            color: var(--text);
-            font-size: 13px;
-            outline: none;
-            font-family: 'Inter', sans-serif;
-            transition: border-color 0.2s;
-        }
-        .form-group input:focus, .form-group textarea:focus { border-color: var(--brand); }
-        .form-group textarea { resize: vertical; min-height: 70px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .modal-footer {
-            padding: 16px 24px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-        }
-        .btn-cancel {
-            padding: 9px 18px;
-            background: transparent;
-            border: 1px solid rgba(255,255,255,0.1);
-            color: var(--text2);
-            border-radius: 8px;
-            font-size: 13px;
-            cursor: pointer;
-            font-family: 'Inter', sans-serif;
-        }
-        .btn-cancel:hover { background: rgba(255,255,255,0.05); }
-
-        /* ───── SCROLLBAR ───── */
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
-
-        /* ───── BG DECOR ───── */
-        .bg-glow {
-            position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: -1;
-        }
-
-        /* ───── BOTS TAB ───── */
-        .bots-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            padding: 24px;
-        }
-        .bot-card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            transition: all 0.3s;
-        }
-        .bot-card:hover { transform: translateY(-5px); border-color: var(--brand); }
-        .bot-header { display: flex; justify-content: space-between; align-items: center; }
-        .bot-name { font-weight: 700; font-size: 16px; }
-        .bot-status-pill {
-            font-size: 10px;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .status-connected { background: var(--brand-glow); color: var(--brand); }
-        .status-disconnected { background: var(--red-glow); color: var(--red); }
-        .status-qr { background: rgba(245, 158, 11, 0.15); color: var(--yellow); }
-        
-        .qr-container {
-            background: #fff;
-            padding: 15px;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 200px;
-        }
-        .qr-container canvas, .qr-container img { max-width: 100%; height: auto; }
-        .qr-placeholder { color: #000; font-size: 12px; text-align: center; }
-    </style>
+    <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        @keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+        .uploading-preview {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+        }
+        .img-thumb-wrap {
+            position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        .img-thumb-wrap img {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        .img-thumb-wrap .remove-img {
+            position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,0.6);
+            border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer;
+            color: white; font-size: 11px; display: flex; align-items: center; justify-content: center;
+        }
+        .img-thumb-wrap .upload-status {
+            position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.55);
+            font-size: 10px; color: white; text-align: center; padding: 2px 0;
+        }
+        .upload-drop-zone {
+            border: 2px dashed var(--border); border-radius: 10px;
+            padding: 20px; text-align: center; cursor: pointer;
+            transition: border-color .2s, background .2s; color: var(--text3);
+        }
+        .upload-drop-zone:hover, .upload-drop-zone.drag-over {
+            border-color: var(--brand); background: rgba(16,185,129,.05); color: var(--brand);
+        }
+        .upload-drop-zone i { font-size: 28px; display: block; margin-bottom: 6px; }
+    </style>
 </head>
 <body>
     <!-- BG Glows -->
@@ -534,13 +64,10 @@
             <button class="tab-btn" onclick="switchTab('bots')" id="tabBots">
                 <i class="ph ph-robot"></i> Mis Datos
             </button>
-            <!-- <button class="tab-btn" onclick="switchTab('users')" id="tabUsers">
-                <i class="ph ph-users"></i> Usuarios
-            </button> -->
         </div>
         <div class="header-actions">
             <button class="btn-icon" onclick="refreshAll()" title="Refrescar"><i class="ph ph-arrows-clockwise"></i></button>
-            <button class="btn-icon" onclick="logout()" title="Cerrar Sesión" style="color: var(--red);"><i class="ph ph-sign-out"></i></button>
+            <button class="btn-icon" onclick="logout()" title="Cerrar Sesión" style="color:var(--red);"><i class="ph ph-sign-out"></i></button>
         </div>
     </header>
 
@@ -556,7 +83,10 @@
                         <input type="text" placeholder="Buscar número..." oninput="filterSessions(this.value)">
                     </div>
                     <div class="sessions-list" id="sessionsList">
-                        <div class="empty-state" style="padding:40px;"><i class="ph ph-spinner" style="font-size:24px;animation:spin 1s linear infinite"></i><p style="margin-top:10px;">Cargando...</p></div>
+                        <div class="empty-state" style="padding:40px;">
+                            <i class="ph ph-spinner" style="font-size:24px;animation:spin 1s linear infinite"></i>
+                            <p style="margin-top:10px;">Cargando...</p>
+                        </div>
                     </div>
                 </aside>
                 <section class="chat-area">
@@ -566,8 +96,14 @@
                             <h3 id="activeUserPhone"></h3>
                             <span id="chatStatusText"><span class="dot"></span> Interacción Reciente</span>
                         </div>
-                        <button id="btnToggleBot" onclick="toggleBotPause()" title="Reactivar Bot" style="margin-left:auto;background:var(--brand);color:white;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;display:none;"><i class="ph ph-robot"></i> Reactivar Bot</button>
-                        <button onclick="clearActiveChat()" title="Limpiar historial" style="margin-left:8px;background:#ff4d4d;color:white;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;"><i class="ph ph-trash"></i> Limpiar chat</button>
+                        <button id="btnToggleBot" onclick="toggleBotPause()" title="Reactivar Bot"
+                            style="margin-left:auto;background:var(--brand);color:white;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;display:none;">
+                            <i class="ph ph-robot"></i> Reactivar Bot
+                        </button>
+                        <button onclick="clearActiveChat()" title="Limpiar historial"
+                            style="margin-left:8px;background:#ff4d4d;color:white;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;">
+                            <i class="ph ph-trash"></i> Limpiar chat
+                        </button>
                     </div>
                     <div class="empty-state" id="chatEmpty">
                         <div class="empty-icon"><i class="ph ph-chats"></i></div>
@@ -576,7 +112,9 @@
                     </div>
                     <div class="chat-messages" id="chatMessages" style="display:none;"></div>
                     <div class="chat-input-area" id="chatInputArea" style="display:none;">
-                        <input type="text" id="humanReplyInput" placeholder="Escribe para responder (el bot se pausará)..." onkeypress="if(event.key === 'Enter') sendHumanReply()">
+                        <input type="text" id="humanReplyInput"
+                            placeholder="Escribe para responder (el bot se pausará)..."
+                            onkeypress="if(event.key === 'Enter') sendHumanReply()">
                         <button onclick="sendHumanReply()"><i class="ph ph-paper-plane-right"></i></button>
                     </div>
                 </section>
@@ -587,16 +125,14 @@
         <div class="tab-page" id="pageProducts">
             <div class="products-layout">
                 <div class="products-toolbar">
-                    <div style="display: flex; align-items: center; gap: 16px;">
+                    <div style="display:flex;align-items:center;gap:16px;">
                         <h2><i class="ph ph-package" style="vertical-align:middle;margin-right:6px;"></i> Catálogo</h2>
                     </div>
                     <button class="btn-primary" onclick="openProductModal()">
-                        <i class="ph ph-plus-circle"></i> Agregar Producto
+                        <i class="ph ph-plus-circle"></i> Agregar Propiedad
                     </button>
                 </div>
-                <div class="products-grid" id="productsGrid">
-                    <!-- Cards injected via JS -->
-                </div>
+                <div class="products-grid" id="productsGrid"></div>
             </div>
         </div>
 
@@ -609,29 +145,13 @@
                         <i class="ph ph-plus-circle"></i> Añadir Nueva Tienda
                     </button>
                 </div>
-                <div class="bots-grid" id="botsGrid">
-                    <!-- Bots list here -->
-                </div>
+                <div class="bots-grid" id="botsGrid"></div>
             </div>
         </div>
 
-        <!-- ===== USERS TAB ===== -->
-        <div class="tab-page" id="pageUsers">
-            <div class="products-layout">
-                <div class="products-toolbar">
-                    <h2><i class="ph ph-users" style="vertical-align:middle;margin-right:6px;"></i> Gestión de Usuarios</h2>
-                    <button class="btn-primary" onclick="openUserModal()">
-                        <i class="ph ph-user-plus"></i> Añadir Usuario
-                    </button>
-                </div>
-                <div class="products-grid" id="usersGrid">
-                    <!-- Users list here -->
-                </div>
-            </div>
-        </div>
     </main>
 
-    <!-- ───── MODAL ───── -->
+    <!-- ───── MODAL PROPIEDAD ───── -->
     <div class="modal-overlay hidden" id="productModal">
         <div class="modal">
             <div class="modal-header">
@@ -640,16 +160,18 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="pId">
-                <div class="form-group">
-                    <label>Asignar a Tienda/Bot *</label>
-                    <select id="pStoreId" style="border-color: var(--brand);">
-                        <!-- Options injected via JS -->
-                    </select>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombre / Título *</label>
+                        <input type="text" id="pNombre" placeholder="Ej: Hermoso Apartamento Campestre">
+                    </div>
+                    <div class="form-group">
+                        <label>Referencia</label>
+                        <input type="text" id="pReferencia" placeholder="Ej: AP-102 (auto si vacío)">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Nombre de la propiedad *</label>
-                    <input type="text" id="pNombre" placeholder="Ej: Hermoso Apartamento Campestre">
-                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Ciudad</label>
@@ -660,51 +182,60 @@
                         <input type="text" id="pBarrio" placeholder="Ej: El Poblado">
                     </div>
                 </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Habitaciones</label>
-                        <input type="number" id="pHabitaciones" placeholder="3">
+                        <input type="number" id="pHabitaciones" placeholder="3" min="0">
                     </div>
                     <div class="form-group">
                         <label>Baños</label>
                         <input type="text" id="pBanos" placeholder="Ej: 2.5">
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label>Pisos</label>
-                        <input type="number" id="pPisos" placeholder="1">
-                    </div>
-                    <div class="form-group">
-                        <label>Precio (COP)</label>
-                        <input type="number" id="pPrecio" placeholder="350000000">
+                        <input type="number" id="pPisos" placeholder="1" min="0">
                     </div>
                 </div>
+
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Metros Cuadrados</label>
-                        <input type="number" id="pMetros" placeholder="98">
+                        <label>Precio (COP)</label>
+                        <input type="number" id="pPrecio" placeholder="350000000" min="0">
                     </div>
                     <div class="form-group">
-                        <label>Referencia</label>
-                        <input type="text" id="pReferencia" placeholder="Ej: AP-102">
+                        <label>Metros Cuadrados</label>
+                        <input type="number" id="pMetros" placeholder="98" min="0">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>Subir Fotos (múltiple)</label>
-                    <input type="file" id="pFotos" multiple accept="image/*">
-                </div>
+
                 <div class="form-group">
                     <label>Características</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="pCaracteristicaInput" placeholder="Ej: Balcón, Ascensor, Vigilancia 24/7" style="flex: 1;">
-                        <button type="button" onclick="addCaracteristica()" class="btn-primary" style="padding: 0 16px;">
-                            Agregar
-                        </button>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="pCaracteristicaInput"
+                            placeholder="Ej: Balcón, Ascensor..."
+                            style="flex:1;"
+                            onkeypress="if(event.key==='Enter'){event.preventDefault();addCaracteristica();}">
+                        <button type="button" onclick="addCaracteristica()" class="btn-primary" style="padding:0 16px;">Agregar</button>
                     </div>
-                    <div id="pCaracteristicasContainer" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
-                    <input type="hidden" id="pCaracteristicas">
+                    <div id="pCaracteristicasContainer" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
                 </div>
+
+                <div class="form-group">
+                    <label>Fotos de la propiedad</label>
+                    <div class="upload-drop-zone" id="dropZone" onclick="document.getElementById('pFotos').click()">
+                        <i class="ph ph-cloud-arrow-up"></i>
+                        <span>Haz clic o arrastra imágenes aquí</span>
+                        <small style="display:block;margin-top:4px;font-size:11px;">JPG, PNG, WebP — múltiples permitidas</small>
+                    </div>
+                    <input type="file" id="pFotos" multiple accept="image/*" style="display:none;" onchange="handleFileSelect(this.files)">
+                    <div class="uploading-preview" id="imagePreviewContainer"></div>
+                    <div id="uploadProgress" style="display:none;margin-top:8px;font-size:12px;color:var(--brand);">
+                        <i class="ph ph-spinner" style="animation:spin 1s linear infinite;vertical-align:middle;"></i>
+                        <span id="uploadProgressText">Subiendo imágenes...</span>
+                    </div>
+                </div>
+
             </div>
             <div class="modal-footer">
                 <button class="btn-cancel" onclick="closeProductModal()">Cancelar</button>
@@ -733,10 +264,10 @@
                 </div>
                 <div class="form-group">
                     <label>System Prompt (Instrucciones de la IA) *</label>
-                    <textarea id="sPrompt" placeholder="Eres un vendedor experto en..." style="height: 120px;"></textarea>
+                    <textarea id="sPrompt" placeholder="Eres un vendedor experto en..." style="height:120px;"></textarea>
                 </div>
                 <div class="form-group">
-                    <label>API Key de OpenAI (Opcional, usa la global si queda vacío)</label>
+                    <label>API Key de OpenAI (Opcional)</label>
                     <input type="password" id="sApiKey" placeholder="sk-...">
                 </div>
                 <div class="form-group">
@@ -751,6 +282,10 @@
                     <label><i class="ph ph-envelope" style="vertical-align:middle;margin-right:4px;"></i> Correo de PQR / Soporte</label>
                     <input type="email" id="sPqrEmail" placeholder="ej: soporte@vidasanas.com">
                     <small style="color:var(--text2);font-size:11px;">El bot dará este correo si el cliente tiene quejas o reclamos.</small>
+                </div>
+                <div class="form-group">
+                    <label><i class="ph ph-calendar-check" style="vertical-align:middle;margin-right:4px;"></i> Correo Admin Google Calendar</label>
+                    <input type="email" id="sAdminCalendarEmail" placeholder="ej: admin@miempresa.com">
                 </div>
                 <hr style="border:0;border-top:1px solid var(--border);margin:15px 0;">
                 <div class="form-group">
@@ -770,90 +305,85 @@
         </div>
     </div>
 
-    <style>@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }</style>
-
     <script>
+    // ═══════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════
+    let allSessions   = [];
+    let allProducts   = [];
+    let allStores     = [];
+    let activeSessionId   = null;
+    let editingProductId  = null;
+    let editingStoreId    = null;
+    let currentCaracteristicas = [];
+    // Imágenes: { file: File, previewUrl: string, cloudinaryUrl: string|null, status: 'pending'|'uploaded'|'existing' }
+    let currentImages = [];
+    let serverOnline  = true;
+
+    // ═══════════════════════════════════════
+    //  UTILS
+    // ═══════════════════════════════════════
+    function escapeHTML(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function cleanPhone(sessionId) {
+        let phone = sessionId.includes('_') ? sessionId.split('_').slice(1).join('_') : sessionId;
+        phone = phone.replace(/@.*$/, '');
+        if (phone.length >= 10) {
+            const cc = phone.slice(0, phone.length - 10);
+            const local = phone.slice(phone.length - 10);
+            return '+' + cc + ' ' + local.slice(0,3) + ' ' + local.slice(3,6) + ' ' + local.slice(6);
+        }
+        return '+' + phone;
+    }
+
+    function formatTime(t) {
+        if (!t) return '';
+        try {
+            let d = new Date(t);
+            if (isNaN(d.getTime())) d = new Date(t + 'Z');
+            if (isNaN(d.getTime())) return '';
+            const diffMins = Math.floor((Date.now() - d) / 60000);
+            if (diffMins < 1)    return 'Ahora';
+            if (diffMins < 60)   return diffMins + ' min';
+            if (diffMins < 1440) return Math.floor(diffMins / 60) + 'h';
+            return d.toLocaleDateString([], { day: '2-digit', month: 'short' });
+        } catch(e) { return ''; }
+    }
+
+    function showOfflineBanner(show) {
+        let banner = document.getElementById('offlineBanner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'offlineBanner';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:white;text-align:center;padding:8px;font-size:13px;font-weight:600;transition:transform .3s;';
+            banner.innerHTML = '<i class="ph ph-wifi-slash" style="margin-right:6px;"></i> Servidor desconectado — reconectando automáticamente...';
+            document.body.prepend(banner);
+        }
+        banner.style.transform = show ? 'translateY(0)' : 'translateY(-100%)';
+    }
+
+    async function safeFetch(url, options) {
+        try {
+            const res = options ? await fetch(url, options) : await fetch(url);
+            if (!serverOnline) { serverOnline = true; showOfflineBanner(false); }
+            return res;
+        } catch(e) {
+            if (serverOnline) { serverOnline = false; showOfflineBanner(true); }
+            return null;
+        }
+    }
+
     async function logout() {
         if (!confirm('¿Cerrar sesión?')) return;
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
             window.location.href = '/login.html';
-        } catch (e) {
-            console.error('Error al cerrar sesión:', e);
-        }
-    }
-
-    // ═══════════════════════════════════════
-    //  STATE & UTILS
-    // ═══════════════════════════════════════
-    let allSessions = [];
-    let allProducts = [];
-    let allStores = [];
-    let activeSessionId = null;
-    let editingProductId = null;
-    let currentCaracteristicas = [];
-    let currentImagenes = [];
-
-    function addCaracteristica() {
-        const input = document.getElementById('pCaracteristicaInput');
-        if (!input) return;
-        const val = input.value.trim();
-        if (!val) return;
-        if (!currentCaracteristicas.includes(val)) {
-            currentCaracteristicas.push(val);
-            renderCaracteristicas();
-        }
-        input.value = '';
-    }
-
-    function removeCaracteristica(index) {
-        currentCaracteristicas.splice(index, 1);
-        renderCaracteristicas();
-    }
-
-    function renderCaracteristicas() {
-        const container = document.getElementById('pCaracteristicasContainer');
-        if (!container) return;
-        container.innerHTML = '';
-        currentCaracteristicas.forEach((c, index) => {
-            const badge = document.createElement('span');
-            badge.className = 'card-badge badge-active';
-            badge.style.display = 'inline-flex';
-            badge.style.alignItems = 'center';
-            badge.style.gap = '4px';
-            badge.style.cursor = 'default';
-            badge.style.textTransform = 'none';
-            badge.innerHTML = `${escapeHTML(c)} <i class="ph ph-x" style="cursor:pointer;" onclick="removeCaracteristica(${index})"></i>`;
-            container.appendChild(badge);
-        });
-        const hiddenInput = document.getElementById('pCaracteristicas');
-        if (hiddenInput) {
-            hiddenInput.value = JSON.stringify(currentCaracteristicas);
-        }
-    }
-
-    function escapeHTML(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-
-    function cleanPhone(sessionId) {
-        // Extrae solo el número: quita storeId_ al inicio y @lid/@c.us al final
-        let phone = sessionId.includes('_') ? sessionId.split('_').slice(1).join('_') : sessionId;
-        phone = phone.replace(/@.*$/, ''); // quita @lid, @c.us, etc.
-        // Formatear con espacios para legibilidad: +52 1 331 228 8602
-        if (phone.length >= 10) {
-            // Tomar los últimos 10 dígitos como número local y el resto como código de país
-            const countryCode = phone.slice(0, phone.length - 10);
-            const local = phone.slice(phone.length - 10);
-            return '+' + countryCode + ' ' + local.slice(0,3) + ' ' + local.slice(3,6) + ' ' + local.slice(6);
-        }
-        return '+' + phone;
+        } catch(e) { console.error(e); }
     }
 
     // ═══════════════════════════════════════
@@ -862,22 +392,12 @@
     function switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
-        if (tab === 'chats') {
-            document.getElementById('tabChats').classList.add('active');
-            document.getElementById('pageChats').classList.add('active');
-        } else if (tab === 'products') {
-            document.getElementById('tabProducts').classList.add('active');
-            document.getElementById('pageProducts').classList.add('active');
-            loadProducts();
-        } else if (tab === 'bots') {
-            document.getElementById('tabBots').classList.add('active');
-            document.getElementById('pageBots').classList.add('active');
-            loadStores();
-        } else if (tab === 'users') {
-            document.getElementById('tabUsers').classList.add('active');
-            document.getElementById('pageUsers').classList.add('active');
-            loadUsers();
-        }
+        const map = { chats: ['tabChats','pageChats'], products: ['tabProducts','pageProducts'], bots: ['tabBots','pageBots'] };
+        const [btnId, pageId] = map[tab] || [];
+        if (btnId) document.getElementById(btnId).classList.add('active');
+        if (pageId) document.getElementById(pageId).classList.add('active');
+        if (tab === 'products') loadProducts();
+        if (tab === 'bots')     loadStores();
     }
 
     function refreshAll() {
@@ -890,55 +410,44 @@
     //  CHATS
     // ═══════════════════════════════════════
     async function loadSessions() {
-        try {
-            const filterEl = document.getElementById('chatStoreFilter');
-            const storeFilter = filterEl ? filterEl.value : '';
-            const url = storeFilter ? `/dashboard/api/sessions?storeId=${storeFilter}` : '/dashboard/api/sessions';
-            const res = await fetch(url);
-            const data = await res.json();
-            
-            if (Array.isArray(data)) {
-                allSessions = data;
-                document.getElementById('chatCount').textContent = allSessions.length;
-                renderSessionsList();
-            }
-        } catch (e) {
-            console.error('Error cargando sesiones:', e);
+        const res = await safeFetch('/dashboard/api/sessions');
+        if (!res) return;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+            allSessions = data;
+            document.getElementById('chatCount').textContent = allSessions.length;
+            renderSessionsList();
         }
     }
 
     function filterSessions(val) {
-        const list = document.getElementById('sessionsList');
-        const items = list.querySelectorAll('.session-item');
-        items.forEach(item => {
-            const phone = item.getAttribute('data-phone') || '';
-            item.style.display = phone.includes(val) ? '' : 'none';
+        document.querySelectorAll('#sessionsList .session-item').forEach(item => {
+            item.style.display = (item.getAttribute('data-phone') || '').includes(val) ? '' : 'none';
         });
     }
 
     function renderSessionsList() {
         const list = document.getElementById('sessionsList');
         if (!list) return;
-        
-        // Limpieza selectiva: no destruir todo el DOM para evitar parpadeo
-        const _existingItems = {};
-        list.querySelectorAll('.session-item').forEach(el => { _existingItems[el.getAttribute('data-phone')] = el; });
-        const _currentIds = new Set(allSessions.map(s => s.sessionId));
-        Object.keys(_existingItems).forEach(id => { if (!_currentIds.has(id)) _existingItems[id].remove(); });
-        const _emptyEl = list.querySelector('.empty-state'); if (_emptyEl) _emptyEl.remove();
+        const existing = {};
+        list.querySelectorAll('.session-item').forEach(el => { existing[el.getAttribute('data-phone')] = el; });
+        const currentIds = new Set(allSessions.map(s => s.sessionId));
+        Object.keys(existing).forEach(id => { if (!currentIds.has(id)) existing[id].remove(); });
+        const emptyEl = list.querySelector('.empty-state'); if (emptyEl) emptyEl.remove();
+
         if (allSessions.length === 0) {
             list.innerHTML = '<div class="empty-state" style="padding:40px;"><p>No hay conversaciones aún.</p></div>';
             return;
         }
+
         allSessions.forEach(s => {
             const history = Array.isArray(s.history) ? s.history : [];
             const last = history.slice().reverse().find(m => m.role === 'user' || m.role === 'assistant');
             let preview = last ? (typeof last.content === 'string' ? last.content : 'Envió un mensaje') : '—';
             if (preview.length > 40) preview = preview.substring(0, 40) + '…';
-
-            const ic = '<div class="top"><span class="phone">' + escapeHTML(cleanPhone(s.sessionId)) + '</span><span class="time">' + formatTime(s.updatedAt) + '</span></div><div class="preview">' + (last?.role === 'assistant' ? '<i class="ph ph-robot" style="color:var(--brand);margin-right:4px;vertical-align:middle;"></i>' : '') + escapeHTML(preview) + '</div>';
+            const ic = `<div class="top"><span class="phone">${escapeHTML(cleanPhone(s.sessionId))}</span><span class="time">${formatTime(s.updatedAt)}</span></div><div class="preview">${last?.role==='assistant'?'<i class="ph ph-robot" style="color:var(--brand);margin-right:4px;vertical-align:middle;"></i>':''}${escapeHTML(preview)}</div>`;
             const hash = preview + '|' + (s.updatedAt || '');
-            let div = _existingItems[s.sessionId];
+            let div = existing[s.sessionId];
             if (div) {
                 if (div._hash !== hash) { div.innerHTML = ic; div._hash = hash; }
                 div.classList.toggle('active', activeSessionId === s.sessionId);
@@ -947,65 +456,43 @@
                 div.className = 'session-item' + (activeSessionId === s.sessionId ? ' active' : '');
                 div.setAttribute('data-phone', s.sessionId);
                 div.onclick = () => selectSession(s.sessionId);
-                div.innerHTML = ic;
-                div._hash = hash;
+                div.innerHTML = ic; div._hash = hash;
                 list.appendChild(div);
             }
         });
 
-        // Si hay una sesión activa, actualizar su vista sin redibujar la lista
         if (activeSessionId) {
             const current = allSessions.find(x => x.sessionId === activeSessionId);
             if (current) renderActiveChat(current);
         }
     }
 
-    function formatTime(t) {
-        if (!t) return '';
-        try {
-            let d = new Date(t);
-            if (isNaN(d.getTime())) d = new Date(t + 'Z');
-            if (isNaN(d.getTime())) return '';
-            const now = new Date();
-            const diffMs = now - d;
-            const diffMins = Math.floor(diffMs / 60000);
-            if (diffMins < 1) return 'Ahora';
-            if (diffMins < 60) return diffMins + ' min';
-            if (diffMins < 1440) return Math.floor(diffMins/60) + 'h';
-            return d.toLocaleDateString([], {day:'2-digit', month:'short'});
-        } catch(e) { return ''; }
-    }
-
     function selectSession(sid) {
         activeSessionId = sid;
-        // Solo marcamos como activo en la lista sin redibujar todo
         document.querySelectorAll('.session-item').forEach(el => {
             el.classList.toggle('active', el.getAttribute('data-phone') === sid);
         });
-
         const s = allSessions.find(x => x.sessionId === sid);
-        if (!s) return;
-        renderActiveChat(s);
+        if (s) renderActiveChat(s);
     }
 
     let _lastChatHash = '';
     function renderActiveChat(s) {
-        const sid = s.sessionId;
         const history = Array.isArray(s.history) ? s.history : [];
         const isPaused = !!s.isPaused;
-        const chatHash = sid + '|' + history.length + '|' + isPaused + '|' + JSON.stringify(history[history.length - 1]?.content || '').substring(0, 50);
+        const chatHash = s.sessionId + '|' + history.length + '|' + isPaused + '|' + JSON.stringify(history[history.length-1]?.content||'').substring(0,50);
         if (_lastChatHash === chatHash) return;
         _lastChatHash = chatHash;
-        document.getElementById('chatEmpty').style.display = 'none';
-        document.getElementById('chatHeader').style.display = 'flex';
+
+        document.getElementById('chatEmpty').style.display     = 'none';
+        document.getElementById('chatHeader').style.display    = 'flex';
         document.getElementById('chatInputArea').style.display = 'flex';
         const msgs = document.getElementById('chatMessages');
         msgs.style.display = 'flex';
         msgs.innerHTML = '';
-        document.getElementById('activeUserPhone').textContent = cleanPhone(sid);
+        document.getElementById('activeUserPhone').textContent = cleanPhone(s.sessionId);
 
-        // Mostrar estado de pausa
-        const statusEl = document.getElementById('chatStatusText');
+        const statusEl  = document.getElementById('chatStatusText');
         const btnToggle = document.getElementById('btnToggleBot');
         if (isPaused) {
             statusEl.innerHTML = '<span class="dot" style="background:var(--yellow);"></span> Bot Pausado — respondiendo tú';
@@ -1022,7 +509,7 @@
             let content = typeof m.content === 'string' ? m.content : '';
             if (m.role === 'user') {
                 div.classList.add('user');
-                if (Array.isArray(m.content)) { const tp = m.content.find(c => c.type === 'text'); content = tp?.text || ''; }
+                if (Array.isArray(m.content)) { const tp = m.content.find(c => c.type==='text'); content = tp?.text||''; }
                 div.textContent = content || 'Sent a message';
             } else if (m.role === 'assistant' && !m.tool_calls) {
                 div.classList.add('assistant');
@@ -1041,162 +528,57 @@
 
     async function sendHumanReply() {
         if (!activeSessionId) return;
-        const input = document.getElementById('humanReplyInput');
+        const input   = document.getElementById('humanReplyInput');
         const message = input.value.trim();
         if (!message) return;
-
         input.value = '';
-        const parts = activeSessionId.split('_');
+        const parts   = activeSessionId.split('_');
         const storeId = parts[0];
-        const phone = parts.length > 1 ? parts.slice(1).join('_') : activeSessionId;
-
-        try {
-            await fetch('/dashboard/api/reply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: activeSessionId, message, phone, storeId })
-            });
-            _lastChatHash = ''; // Forzar re-render
-            await loadSessions();
-        } catch(e) {
-            alert('Error enviando mensaje: ' + e.message);
-        }
+        const phone   = parts.length > 1 ? parts.slice(1).join('_') : activeSessionId;
+        const res = await safeFetch('/dashboard/api/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: activeSessionId, message, phone, storeId })
+        });
+        if (res) { _lastChatHash = ''; await loadSessions(); }
+        else alert('Error enviando mensaje');
     }
 
     async function toggleBotPause() {
         if (!activeSessionId) return;
-        try {
-            const res = await fetch('/dashboard/api/resume', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: activeSessionId })
-            });
-            if (!res.ok) throw new Error((await res.json()).error);
-            _lastChatHash = ''; // Forzar re-render
-            await loadSessions();
-        } catch(e) {
-            alert('Error reactivando bot: ' + e.message);
-        }
+        const res = await safeFetch('/dashboard/api/resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: activeSessionId })
+        });
+        if (res && res.ok) { _lastChatHash = ''; await loadSessions(); }
+        else alert('Error reactivando bot');
     }
 
     async function clearActiveChat() {
         if (!activeSessionId) return;
         if (!confirm('¿Limpiar el historial de este chat? El bot empezará desde cero con este usuario.')) return;
-        try {
-            const res = await fetch(`/dashboard/api/sessions/${encodeURIComponent(activeSessionId)}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error((await res.json()).error);
+        const res = await safeFetch(`/dashboard/api/sessions/${encodeURIComponent(activeSessionId)}`, { method: 'DELETE' });
+        if (res && res.ok) {
             activeSessionId = null;
-            document.getElementById('chatHeader').style.display = 'none';
-            document.getElementById('chatMessages').style.display = 'none';
+            _lastChatHash = '';
+            document.getElementById('chatHeader').style.display    = 'none';
+            document.getElementById('chatMessages').style.display  = 'none';
             document.getElementById('chatInputArea').style.display = 'none';
-            document.getElementById('chatEmpty').style.display = 'flex';
+            document.getElementById('chatEmpty').style.display     = 'flex';
             await loadSessions();
-        } catch (e) {
-            alert('Error limpiando chat: ' + e.message);
-        }
-    }
-
-    async function extractWithAI() {
-        const url = document.getElementById('pMagicLink').value.trim();
-        if (!url) {
-            alert('Pega un link primero');
-            return;
-        }
-        
-        const btn = document.getElementById('btnMagic');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite"></i> ...';
-        btn.disabled = true;
-
-        try {
-            const res = await fetch('/dashboard/api/products/extract', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
-            });
-            const data = await res.json();
-            
-            if (data.error) throw new Error(data.error);
-
-            if (data.nombre) document.getElementById('pNombre').value = data.nombre;
-            if (data.precio) document.getElementById('pPrecio').value = data.precio;
-            if (data.categoria) document.getElementById('pCategoria').value = data.categoria;
-            if (data.descripcion_corta) document.getElementById('pDescCorta').value = data.descripcion_corta;
-            if (data.descripcion_larga) document.getElementById('pDescLarga').value = data.descripcion_larga;
-            if (data.imagen) document.getElementById('pImagen').value = data.imagen;
-            
-            // Manejar sugerencia de contexto
-            if (data.system_prompt_sugerido) {
-                document.getElementById('aiPromptContainer').style.display = 'block';
-                document.getElementById('pAiPromptText').textContent = data.system_prompt_sugerido;
-                window.lastAiPrompt = data.system_prompt_sugerido;
-            } else {
-                document.getElementById('aiPromptContainer').style.display = 'none';
-            }
-
-            // Si no habian puesto el link de compra, lo ponemos
-            if (!document.getElementById('pLink').value) {
-                document.getElementById('pLink').value = url;
-            }
-
-        } catch(e) {
-            alert('Error extrayendo con IA: ' + e.message);
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
-    }
-
-    async function applyAiPrompt() {
-        const prompt = window.lastAiPrompt;
-        const storeId = document.getElementById('pStoreId').value;
-        if (!prompt || !storeId) return;
-
-        if (!confirm("¿Deseas actualizar la personalidad del Bot con esta sugerencia? Reemplazará el System Prompt actual de la tienda.")) return;
-
-        try {
-            // Buscamos la tienda actual para no sobreescribir otros datos si no los tenemos
-            const store = allStores.find(s => s.id === storeId);
-            if (!store) throw new Error("Tienda no encontrada");
-
-            const res = await fetch(`/dashboard/api/stores/${storeId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: store.name,
-                    systemPrompt: prompt,
-                    openaiApiKey: store.openaiApiKey,
-                    isActive: store.isActive
-                })
-            });
-
-            if (res.ok) {
-                alert("¡Bot actualizado con éxito!");
-                document.getElementById('aiPromptContainer').style.display = 'none';
-                loadStores(); // Recargar para tener los datos frescos
-            } else {
-                throw new Error("Error en la respuesta del servidor");
-            }
-        } catch(e) {
-            alert("Error al aplicar el contexto: " + e.message);
-        }
+        } else alert('Error limpiando chat');
     }
 
     // ═══════════════════════════════════════
     //  PRODUCTS
     // ═══════════════════════════════════════
     async function loadProducts() {
-        try {
-            const filterEl = document.getElementById('productStoreFilter');
-            const storeFilter = filterEl ? filterEl.value : '';
-            const url = storeFilter ? `/dashboard/api/products?storeId=${storeFilter}` : '/dashboard/api/products';
-            const res = await fetch(url);
-            allProducts = await res.json();
-            document.getElementById('productCount').textContent = allProducts.length;
-            renderProducts();
-        } catch (e) {
-            console.error(e);
-        }
+        const res = await safeFetch('/dashboard/api/products');
+        if (!res) return;
+        allProducts = await res.json();
+        document.getElementById('productCount').textContent = allProducts.length;
+        renderProducts();
     }
 
     function renderProducts() {
@@ -1209,95 +591,158 @@
         allProducts.forEach(p => {
             const card = document.createElement('div');
             card.className = 'product-card';
-            card.style.cssText = 'padding: 0; overflow: hidden; display: grid; grid-template-columns: 140px 1fr; min-height: 110px;';
-
-            const priceStr = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(p.precio);
-
+            card.style.cssText = 'padding:0;overflow:hidden;display:grid;grid-template-columns:140px 1fr;min-height:110px;';
+            const priceStr = new Intl.NumberFormat('es-CO', { style:'currency', currency:'COP', maximumFractionDigits:0 }).format(p.precio);
             const firstPhoto = (Array.isArray(p.imagenes) && p.imagenes.length > 0) ? p.imagenes[0] : (p.imagen_url || '');
             const imgHTML = firstPhoto
-                ? `<img src="${firstPhoto}" alt="${escapeHTML(p.nombre)}" style="width:140px;height:100%;object-fit:cover;display:block;">`
-                : `<div style="width:140px;height:100%;min-height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.03);color:var(--text3);gap:4px;">
-                    <i class="ph ph-image" style="font-size:24px;"></i>
-                    <span style="font-size:10px;">Sin foto</span>
-                </div>`;
-
+                ? `<img src="${escapeHTML(firstPhoto)}" alt="${escapeHTML(p.nombre)}" style="width:140px;height:100%;object-fit:cover;display:block;">`
+                : `<div style="width:140px;min-height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.03);color:var(--text3);gap:4px;"><i class="ph ph-image" style="font-size:24px;"></i><span style="font-size:10px;">Sin foto</span></div>`;
             card.innerHTML = `
                 ${imgHTML}
-                <div style="display:grid; grid-template-rows:auto auto 1fr; padding:12px 14px; gap:6px; min-width:0;">
-
-                    <!-- Fila 1: Nombre + Referencia -->
-                    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:6px;">
-                        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="${escapeHTML(p.nombre)}">
-                            ${escapeHTML(p.nombre)}
-                        </span>
+                <div style="display:grid;grid-template-rows:auto auto 1fr;padding:12px 14px;gap:6px;min-width:0;">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
+                        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="${escapeHTML(p.nombre)}">${escapeHTML(p.nombre)}</span>
+                        ${p.referencia ? `<span style="font-size:10px;color:var(--text3);white-space:nowrap;">${escapeHTML(p.referencia)}</span>` : ''}
                     </div>
-
-                    <!-- Fila 2: Precio + iconos -->
                     <div style="display:flex;flex-direction:column;gap:4px;">
                         <span style="font-size:15px;font-weight:700;color:var(--brand);">${priceStr}</span>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;color:var(--text3);font-size:11px;">
-                            ${p.habitaciones    ? `<span><i class="ph ph-bed" style="vertical-align:middle;"></i> ${p.habitaciones}</span>` : ''}
-                            ${p.baños           ? `<span><i class="ph ph-shower" style="vertical-align:middle;"></i> ${p.baños}</span>` : ''}
+                            ${p.habitaciones ? `<span><i class="ph ph-bed" style="vertical-align:middle;"></i> ${p.habitaciones}</span>` : ''}
+                            ${p.baños        ? `<span><i class="ph ph-shower" style="vertical-align:middle;"></i> ${p.baños}</span>` : ''}
                             ${p.metros_cuadrados ? `<span><i class="ph ph-ruler" style="vertical-align:middle;"></i> ${p.metros_cuadrados}m²</span>` : ''}
-                            ${p.ciudad          ? `<span><i class="ph ph-map-pin" style="vertical-align:middle;"></i> ${escapeHTML(p.ciudad)}</span>` : ''}
+                            ${p.ciudad       ? `<span><i class="ph ph-map-pin" style="vertical-align:middle;"></i> ${escapeHTML(p.ciudad)}</span>` : ''}
                         </div>
                     </div>
-
-                    <!-- Fila 3: Botones alineados al fondo -->
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-self:end;">
-                        <button class="btn-sm btn-edit" style="justify-content:center;">
-                            <i class="ph ph-pencil-simple"></i> Editar
-                        </button>
-                        <button class="btn-sm danger btn-delete" style="justify-content:center;">
-                            <i class="ph ph-trash"></i> Eliminar
-                        </button>
+                        <button class="btn-sm btn-edit" style="justify-content:center;"><i class="ph ph-pencil-simple"></i> Editar</button>
+                        <button class="btn-sm danger btn-delete" style="justify-content:center;"><i class="ph ph-trash"></i> Eliminar</button>
                     </div>
-
-                </div>
-            `;
-            
-            // Asignar listeners dinámicos para evitar errores de sintaxis y escaping
-            const editBtn = card.querySelector('.btn-edit');
-            if (editBtn) editBtn.onclick = () => editProduct(p.id);
-
-            const deleteBtn = card.querySelector('.btn-delete');
-            if (deleteBtn) deleteBtn.onclick = () => confirmDelete(p.id, p.nombre, p.storeId);
-
+                </div>`;
+            card.querySelector('.btn-edit').onclick   = () => editProduct(p.id);
+            card.querySelector('.btn-delete').onclick = () => confirmDelete(p.id, p.nombre);
             grid.appendChild(card);
         });
     }
 
-    // ── Modal ──
+    // ── Características ──
+    function addCaracteristica() {
+        const input = document.getElementById('pCaracteristicaInput');
+        const val = input.value.trim();
+        if (!val || currentCaracteristicas.includes(val)) { input.value=''; return; }
+        currentCaracteristicas.push(val);
+        input.value = '';
+        renderCaracteristicas();
+    }
+
+    function removeCaracteristica(index) {
+        currentCaracteristicas.splice(index, 1);
+        renderCaracteristicas();
+    }
+
+    function renderCaracteristicas() {
+        const container = document.getElementById('pCaracteristicasContainer');
+        container.innerHTML = '';
+        currentCaracteristicas.forEach((c, i) => {
+            const badge = document.createElement('span');
+            badge.className = 'card-badge badge-active';
+            badge.style.cssText = 'display:inline-flex;align-items:center;gap:4px;cursor:default;text-transform:none;';
+            badge.innerHTML = `${escapeHTML(c)} <i class="ph ph-x" style="cursor:pointer;" onclick="removeCaracteristica(${i})"></i>`;
+            container.appendChild(badge);
+        });
+    }
+
+    // ── Imágenes ──
+    function handleFileSelect(files) {
+        Array.from(files).forEach(file => {
+            if (!file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                currentImages.push({ file, previewUrl: reader.result, cloudinaryUrl: null, status: 'pending' });
+                renderImagePreviews();
+            };
+            reader.readAsDataURL(file);
+        });
+        // Reset input so same files can be re-selected
+        document.getElementById('pFotos').value = '';
+    }
+
+    function removeImage(index) {
+        currentImages.splice(index, 1);
+        renderImagePreviews();
+    }
+
+    function renderImagePreviews() {
+        const container = document.getElementById('imagePreviewContainer');
+        container.innerHTML = '';
+        currentImages.forEach((img, i) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'img-thumb-wrap';
+            const statusLabel = img.status === 'existing' ? '' : img.status === 'uploaded' ? '✓' : '...';
+            const statusBg    = img.status === 'uploaded' ? 'rgba(16,185,129,0.7)' : img.status === 'existing' ? 'transparent' : 'rgba(0,0,0,0.55)';
+            wrap.innerHTML = `
+                <img src="${img.previewUrl || img.cloudinaryUrl}" alt="">
+                <button class="remove-img" onclick="removeImage(${i})"><i class="ph ph-x"></i></button>
+                ${statusLabel ? `<div class="upload-status" style="background:${statusBg};">${statusLabel}</div>` : ''}`;
+            container.appendChild(wrap);
+        });
+    }
+
+    // Sube todas las imágenes pendientes a Cloudinary vía backend y retorna las URLs
+    async function uploadPendingImages(referencia) {
+        const pending = currentImages.filter(img => img.status === 'pending');
+        if (pending.length === 0) return;
+
+        const folder = referencia || 'sin-referencia';
+        const base64List = pending.map(img => img.previewUrl); // ya es base64 data URL
+
+        document.getElementById('uploadProgress').style.display = 'block';
+        document.getElementById('uploadProgressText').textContent = `Subiendo ${pending.length} imagen(es)...`;
+
+        const res = await safeFetch('/dashboard/api/upload-images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: base64List, folder })
+        });
+
+        document.getElementById('uploadProgress').style.display = 'none';
+
+        if (!res || !res.ok) throw new Error('Error subiendo imágenes a Cloudinary');
+        const { urls } = await res.json();
+
+        // Actualizar estado local
+        let urlIndex = 0;
+        currentImages.forEach(img => {
+            if (img.status === 'pending') {
+                img.cloudinaryUrl = urls[urlIndex++];
+                img.status = 'uploaded';
+            }
+        });
+        renderImagePreviews();
+    }
+
+    // ── Modal CRUD ──
+    function resetProductModal() {
+        document.getElementById('pId').value           = '';
+        document.getElementById('pNombre').value       = '';
+        document.getElementById('pReferencia').value   = '';
+        document.getElementById('pCiudad').value       = '';
+        document.getElementById('pBarrio').value       = '';
+        document.getElementById('pHabitaciones').value = '';
+        document.getElementById('pBanos').value        = '';
+        document.getElementById('pPisos').value        = '';
+        document.getElementById('pPrecio').value       = '';
+        document.getElementById('pMetros').value       = '';
+        document.getElementById('pFotos').value        = '';
+        currentCaracteristicas = [];
+        currentImages = [];
+        renderCaracteristicas();
+        renderImagePreviews();
+    }
+
     function openProductModal() {
         editingProductId = null;
         document.getElementById('modalTitle').textContent = 'Nueva Propiedad';
-        document.getElementById('pId').value = '';
-        document.getElementById('pNombre').value = '';
-        document.getElementById('pCiudad').value = '';
-        document.getElementById('pBarrio').value = '';
-        document.getElementById('pHabitaciones').value = '';
-        document.getElementById('pBanos').value = '';
-        document.getElementById('pPisos').value = '';
-        document.getElementById('pPrecio').value = '';
-        document.getElementById('pMetros').value = '';
-        document.getElementById('pReferencia').value = '';
-        document.getElementById('pFotos').value = '';
-        
-        currentCaracteristicas = [];
-        renderCaracteristicas();
-        
-        currentImagenes = [];
-
-        // Pre-seleccionar la tienda si hay un filtro activo
-        const productStoreFilter = document.getElementById('productStoreFilter');
-        const filterVal = productStoreFilter ? productStoreFilter.value : '';
-        if (filterVal) {
-            document.getElementById('pStoreId').value = filterVal;
-        } else if (allStores.length === 1) {
-            document.getElementById('pStoreId').value = allStores[0].id;
-        }
-        document.getElementById('pStoreId').disabled = false;
-        
+        resetProductModal();
         document.getElementById('productModal').classList.remove('hidden');
     }
 
@@ -1305,28 +750,25 @@
         const p = allProducts.find(x => x.id === id);
         if (!p) return;
         editingProductId = id;
-        document.getElementById('modalTitle').textContent = 'Editar Propiedad';
-        document.getElementById('pId').value = p.id;
-        document.getElementById('pNombre').value = p.nombre || '';
-        document.getElementById('pCiudad').value = p.ciudad || '';
-        document.getElementById('pBarrio').value = p.barrio || '';
-        document.getElementById('pHabitaciones').value = p.habitaciones || '';
-        document.getElementById('pBanos').value = p.baños || '';
-        document.getElementById('pPisos').value = p.pisos || '';
-        document.getElementById('pPrecio').value = p.precio || '';
-        document.getElementById('pMetros').value = p.metros_cuadrados || '';
-        document.getElementById('pReferencia').value = p.referencia || '';
-        document.getElementById('pFotos').value = '';
-        
+        document.getElementById('modalTitle').textContent    = 'Editar Propiedad';
+        document.getElementById('pId').value                 = p.id;
+        document.getElementById('pNombre').value             = p.nombre || '';
+        document.getElementById('pReferencia').value         = p.referencia || '';
+        document.getElementById('pCiudad').value             = p.ciudad || '';
+        document.getElementById('pBarrio').value             = p.barrio || '';
+        document.getElementById('pHabitaciones').value       = p.habitaciones || '';
+        document.getElementById('pBanos').value              = p.baños || '';
+        document.getElementById('pPisos').value              = p.pisos || '';
+        document.getElementById('pPrecio').value             = p.precio || '';
+        document.getElementById('pMetros').value             = p.metros_cuadrados || '';
+        document.getElementById('pFotos').value              = '';
         currentCaracteristicas = Array.isArray(p.caracteristicas) ? [...p.caracteristicas] : [];
+        // Las imágenes existentes van como "existing" (ya tienen URL de Cloudinary)
+        currentImages = (Array.isArray(p.imagenes) ? p.imagenes : []).map(url => ({
+            file: null, previewUrl: url, cloudinaryUrl: url, status: 'existing'
+        }));
         renderCaracteristicas();
-        
-        currentImagenes = Array.isArray(p.imagenes) ? [...p.imagenes] : [];
-
-        // Fijar la tienda
-        document.getElementById('pStoreId').value = p.storeId;
-        document.getElementById('pStoreId').disabled = true;
-
+        renderImagePreviews();
         document.getElementById('productModal').classList.remove('hidden');
     }
 
@@ -1336,137 +778,103 @@
 
     async function saveProduct() {
         const nombre = document.getElementById('pNombre').value.trim();
-        const storeId = document.getElementById('pStoreId').value;
-        
         if (!nombre) { alert('El nombre es obligatorio'); return; }
-        if (!storeId) { alert('Debes asignar la propiedad a una tienda'); return; }
 
-        // Procesar imágenes seleccionadas
-        const fileInput = document.getElementById('pFotos');
-        let imagenes = [...currentImagenes];
-        if (fileInput && fileInput.files.length > 0) {
-            const filePromises = Array.from(fileInput.files).map(file => {
-                return new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(file);
-                });
-            });
-            const base64Files = await Promise.all(filePromises);
-            imagenes = [...imagenes, ...base64Files];
-        }
+        // Tomar siempre la única tienda disponible
+        const storeId = allStores.length > 0 ? allStores[0].id : null;
+        if (!storeId) { alert('No hay ninguna tienda configurada. Ve a "Mis Datos" y crea una.'); return; }
 
         let referencia = document.getElementById('pReferencia').value.trim();
-        if (!referencia) {
-            referencia = 'SIS' + Math.floor(1000 + Math.random() * 9000);
-        }
+        if (!referencia) referencia = 'SIS' + Math.floor(1000 + Math.random() * 9000);
 
-        const body = {
-            nombre,
-            storeId,
-            ciudad: document.getElementById('pCiudad').value.trim(),
-            barrio: document.getElementById('pBarrio').value.trim(),
-            habitaciones: parseInt(document.getElementById('pHabitaciones').value) || 0,
-            baños: document.getElementById('pBanos').value.trim(),
-            pisos: parseInt(document.getElementById('pPisos').value) || 0,
-            precio: parseFloat(document.getElementById('pPrecio').value) || 0,
-            metros_cuadrados: parseFloat(document.getElementById('pMetros').value) || 0,
-            caracteristicas: currentCaracteristicas,
-            referencia: referencia,
-            imagenes: imagenes,
-            
-            // Campos de compatibilidad con backend heredado (si aplica)
-            categoria: 'propiedad',
-            descripcion_corta: document.getElementById('pBarrio').value.trim(),
-            descripcion_larga: currentCaracteristicas.join(', '),
-            link: '',
-            imagen_url: imagenes[0] || '',
-            stock: 1,
-            activo: true,
-            tags: currentCaracteristicas
-        };
+        const btn = document.getElementById('btnSave');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite"></i> Guardando...';
 
         try {
-            let res;
-            if (editingProductId) {
-                res = await fetch(`/dashboard/api/products/${editingProductId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-            } else {
-                res = await fetch('/dashboard/api/products', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-            }
+            // 1. Subir imágenes pendientes a Cloudinary
+            await uploadPendingImages(referencia);
 
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || 'Error al guardar la propiedad');
+            // 2. Construir array final de URLs
+            const imagenes = currentImages
+                .filter(img => img.cloudinaryUrl)
+                .map(img => img.cloudinaryUrl);
+
+            const body = {
+                nombre,
+                storeId,
+                ciudad:           document.getElementById('pCiudad').value.trim(),
+                barrio:           document.getElementById('pBarrio').value.trim(),
+                habitaciones:     parseInt(document.getElementById('pHabitaciones').value) || 0,
+                baños:            document.getElementById('pBanos').value.trim(),
+                pisos:            parseInt(document.getElementById('pPisos').value) || 0,
+                precio:           parseFloat(document.getElementById('pPrecio').value) || 0,
+                metros_cuadrados: parseFloat(document.getElementById('pMetros').value) || 0,
+                caracteristicas:  currentCaracteristicas,
+                referencia,
+                imagenes,
+                imagen_url:       imagenes[0] || '',
+                folderCloudinary: referencia,
+                // Campos heredados requeridos por el mapper del backend
+                categoria:        'propiedad',
+                descripcion_corta: document.getElementById('pBarrio').value.trim(),
+                descripcion_larga: currentCaracteristicas.join(', '),
+            };
+
+            const url    = editingProductId ? `/dashboard/api/products/${editingProductId}` : '/dashboard/api/products';
+            const method = editingProductId ? 'PUT' : 'POST';
+            const res    = await safeFetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!res || !res.ok) {
+                const err = await res?.json();
+                throw new Error(err?.error || 'Error al guardar');
             }
 
             closeProductModal();
             await loadProducts();
-        } catch (e) {
-            alert('Error guardando propiedad: ' + e.message);
+        } catch(e) {
+            alert('Error: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-floppy-disk"></i> Guardar';
         }
     }
 
-    async function confirmDelete(id, nombre, storeId) {
-        if (!confirm(`¿Eliminar "${nombre}" del catálogo? Esta acción no se puede deshacer.`)) return;
-        try {
-            const res = await fetch(`/dashboard/api/products/${id}?storeId=${storeId}`, { method: 'DELETE' });
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || 'Error en la respuesta del servidor');
-            }
-            await loadProducts();
-        } catch (e) {
-            alert('Error eliminando producto: ' + e.message);
+    async function confirmDelete(id, nombre) {
+        if (!confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`)) return;
+        const storeId = allStores.length > 0 ? allStores[0].id : '';
+        const res = await safeFetch(`/dashboard/api/products/${id}?storeId=${storeId}`, { method: 'DELETE' });
+        if (res && res.ok) await loadProducts();
+        else {
+            const err = await res?.json();
+            alert('Error eliminando: ' + (err?.error || 'desconocido'));
         }
     }
+
+    // ── Drag & Drop ──
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        handleFileSelect(e.dataTransfer.files);
+    });
 
     // ═══════════════════════════════════════
-    //  BOTS / STORES
+    //  STORES / BOTS
     // ═══════════════════════════════════════
     let botPollingIntervals = {};
 
     async function loadStores() {
-        try {
-            const res = await fetch('/dashboard/api/stores');
-            allStores = await res.json();
-            renderBots();
-            updateChatStoreFilter();
-        } catch (e) { console.error(e); }
-    }
-
-    function updateChatStoreFilter() {
-        const chatSelect = document.getElementById('chatStoreFilter');
-        const prodSelect = document.getElementById('productStoreFilter');
-        const modalSelect = document.getElementById('pStoreId');
-        
-        if (!modalSelect) return;
-        
-        const currentChatVal = chatSelect ? chatSelect.value : '';
-        const currentProdVal = prodSelect ? prodSelect.value : '';
-        
-        if (chatSelect) chatSelect.innerHTML = '<option value="">Todos los bots</option>';
-        if (prodSelect) prodSelect.innerHTML = '<option value="">Todas las tiendas</option>';
-        modalSelect.innerHTML = '<option value="">-- Seleccionar Tienda --</option>';
-        
-        allStores.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.name;
-            if (chatSelect) chatSelect.appendChild(opt.cloneNode(true));
-            if (prodSelect) prodSelect.appendChild(opt.cloneNode(true));
-            modalSelect.appendChild(opt.cloneNode(true));
-        });
-        
-        if (chatSelect) chatSelect.value = currentChatVal;
-        if (prodSelect) prodSelect.value = currentProdVal;
+        const res = await safeFetch('/dashboard/api/stores');
+        if (!res) return;
+        allStores = await res.json();
+        renderBots();
     }
 
     function renderBots() {
@@ -1478,81 +886,64 @@
             card.id = `bot-card-${s.id}`;
             card.innerHTML = `
                 <div class="bot-header">
-                    <span class="bot-name">${s.name}</span>
+                    <span class="bot-name">${escapeHTML(s.name)}</span>
                     <span class="bot-status-pill status-disconnected" id="status-${s.id}">CARGANDO...</span>
                 </div>
                 <div id="qr-area-${s.id}" class="qr-container" style="display:none;">
                     <canvas id="qr-canvas-${s.id}"></canvas>
                     <p class="qr-placeholder" style="margin-top:10px;">Escanea con WhatsApp</p>
                 </div>
-                <div id="connected-area-${s.id}" style="display:none; text-align:center; padding:20px;">
-                    <i class="ph ph-check-circle" style="font-size:48px; color:var(--brand);"></i>
-                    <p style="margin-top:10px; font-weight:600;">Bot Conectado</p>
+                <div id="connected-area-${s.id}" style="display:none;text-align:center;padding:20px;">
+                    <i class="ph ph-check-circle" style="font-size:48px;color:var(--brand);"></i>
+                    <p style="margin-top:10px;font-weight:600;">Bot Conectado</p>
                 </div>
                 <div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.03);">
                     <i class="ph ph-calendar-check" style="font-size:18px;color:var(--brand);margin-top:1px;"></i>
                     <div style="min-width:0;">
                         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Google Calendar</div>
-                        <div style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(s.adminCalendarEmail || '')}">
+                        <div style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHTML(s.adminCalendarEmail||'')}">
                             ${s.adminCalendarEmail ? escapeHTML(s.adminCalendarEmail) : 'Sin correo configurado'}
                         </div>
                     </div>
                 </div>
-                <div id="start-btn-area-${s.id}" style="margin-top: auto; margin-bottom: 10px;">
-                    <button class="btn-primary" style="width: 100%; justify-content: center;" onclick="startBot('${s.id}')">Iniciar Bot / Conectar</button>
+                <div id="start-btn-area-${s.id}" style="margin-top:auto;margin-bottom:10px;">
+                    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="startBot('${s.id}')">Iniciar Bot / Conectar</button>
                 </div>
-                <div style="display:flex; gap:10px;">
-                    <button class="btn-sm" style="flex:1; justify-content:center;" title="Editar Tienda" onclick="editStore('${s.id}')"><i class="ph ph-pencil-simple"></i> Editar</button>
-                    <button class="btn-sm danger" style="flex:1; justify-content:center;" title="Eliminar Tienda" onclick="deleteStore('${s.id}', '${s.name}')"><i class="ph ph-trash"></i> Eliminar</button>
-                </div>
-            `;
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-sm" style="flex:1;justify-content:center;" onclick="editStore('${s.id}')"><i class="ph ph-pencil-simple"></i> Editar</button>
+                    <button class="btn-sm danger" style="flex:1;justify-content:center;" onclick="deleteStore('${s.id}','${escapeHTML(s.name)}')"><i class="ph ph-trash"></i> Eliminar</button>
+                </div>`;
             grid.appendChild(card);
             updateBotStatus(s.id);
         });
     }
 
-    async function deleteStore(id, name) {
-        if (!confirm(`¿Estás seguro de eliminar la tienda "${name}"? Se detendrá el bot y se borrarán sus datos.`)) return;
-        try {
-            await fetch(`/dashboard/api/stores/${id}`, { method: 'DELETE' });
-            loadStores();
-        } catch (e) { alert('Error eliminando tienda'); }
-    }
-
     async function updateBotStatus(storeId) {
-        try {
-            const res = await fetch(`/dashboard/api/bots/status/${storeId}`);
-            if (!res.ok) return;
-            const data = await res.json();
-            const statusPill = document.getElementById(`status-${storeId}`);
-            const qrArea = document.getElementById(`qr-area-${storeId}`);
-            const connectedArea = document.getElementById(`connected-area-${storeId}`);
-            const startBtnArea = document.getElementById(`start-btn-area-${storeId}`);
-            if (!statusPill) return;
+        const res = await safeFetch(`/dashboard/api/bots/status/${storeId}`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        const statusPill   = document.getElementById(`status-${storeId}`);
+        const qrArea       = document.getElementById(`qr-area-${storeId}`);
+        const connArea     = document.getElementById(`connected-area-${storeId}`);
+        const startBtnArea = document.getElementById(`start-btn-area-${storeId}`);
+        if (!statusPill) return;
 
-            if (data.status === 'CONNECTED') {
-                statusPill.textContent = 'CONECTADO';
-                statusPill.className = 'bot-status-pill status-connected';
-                qrArea.style.display = 'none';
-                connectedArea.style.display = 'block';
-                startBtnArea.style.display = 'none';
-                if(botPollingIntervals[storeId]) clearInterval(botPollingIntervals[storeId]);
-            } else if (data.status === 'QR_READY' && data.qr) {
-                statusPill.textContent = 'ESPERANDO QR';
-                statusPill.className = 'bot-status-pill status-qr';
-                qrArea.style.display = 'flex';
-                connectedArea.style.display = 'none';
-                startBtnArea.style.display = 'none';
-                QRCode.toCanvas(document.getElementById(`qr-canvas-${storeId}`), data.qr, { width: 180 });
-                startPolling(storeId);
-            } else {
-                statusPill.textContent = 'DESCONECTADO';
-                statusPill.className = 'bot-status-pill status-disconnected';
-                qrArea.style.display = 'none';
-                connectedArea.style.display = 'none';
-                startBtnArea.style.display = 'block';
-            }
-        } catch (e) { console.error(e); }
+        if (data.status === 'CONNECTED') {
+            statusPill.textContent = 'CONECTADO';
+            statusPill.className = 'bot-status-pill status-connected';
+            qrArea.style.display = 'none'; connArea.style.display = 'block'; startBtnArea.style.display = 'none';
+            if (botPollingIntervals[storeId]) { clearInterval(botPollingIntervals[storeId]); delete botPollingIntervals[storeId]; }
+        } else if (data.status === 'QR_READY' && data.qr) {
+            statusPill.textContent = 'ESPERANDO QR';
+            statusPill.className = 'bot-status-pill status-qr';
+            qrArea.style.display = 'flex'; connArea.style.display = 'none'; startBtnArea.style.display = 'none';
+            QRCode.toCanvas(document.getElementById(`qr-canvas-${storeId}`), data.qr, { width: 180 });
+            startPolling(storeId);
+        } else {
+            statusPill.textContent = 'DESCONECTADO';
+            statusPill.className = 'bot-status-pill status-disconnected';
+            qrArea.style.display = 'none'; connArea.style.display = 'none'; startBtnArea.style.display = 'block';
+        }
     }
 
     function startPolling(storeId) {
@@ -1561,242 +952,97 @@
     }
 
     async function startBot(storeId) {
-        const btnArea = document.getElementById(`start-btn-area-${storeId}`);
-        if (btnArea) {
-            const btn = btnArea.querySelector('button');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite"></i> Iniciando...';
-            }
-        }
-        
-        await fetch(`/dashboard/api/bots/start/${storeId}`, { method: 'POST' });
+        const btn = document.querySelector(`#start-btn-area-${storeId} button`);
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite"></i> Iniciando...'; }
+        await safeFetch(`/dashboard/api/bots/start/${storeId}`, { method: 'POST' });
         updateBotStatus(storeId);
         startPolling(storeId);
     }
 
-    let editingStoreId = null;
-
-    function editStore(id) {
-        const s = allStores.find(x => x.id === id);
-        if (!s) return;
-        editingStoreId = id;
-        document.getElementById('storeModalTitle').textContent = 'Editar Tienda / Bot';
-        document.getElementById('sId').value = s.id;
-        document.getElementById('sId').disabled = true;
-        document.getElementById('sNombre').value = s.name;
-        document.getElementById('sPrompt').value = s.systemPrompt || '';
-        document.getElementById('sApiKey').value = s.openaiApiKey || '';
-        document.getElementById('sPhoneNumberId').value = s.whatsappPhoneNumberId || '';
-        document.getElementById('sAccessToken').value = s.whatsappAccessToken || '';
-        document.getElementById('sPqrEmail').value = s.pqrEmail || '';
-        document.getElementById('sAdminCalendarEmail').value = s.adminCalendarEmail || '';
-        document.getElementById('sTelegramToken').value = s.telegramToken || '';
-        document.getElementById('sTelegramActive').checked = !!s.telegramBotActive;
-        document.getElementById('btnSaveStore').textContent = 'Guardar Cambios';
-        document.getElementById('storeModal').classList.remove('hidden');
+    async function deleteStore(id, name) {
+        if (!confirm(`¿Eliminar la tienda "${name}"? Se detendrá el bot y se borrarán sus datos.`)) return;
+        await safeFetch(`/dashboard/api/stores/${id}`, { method: 'DELETE' });
+        loadStores();
     }
 
     function openStoreModal() {
         editingStoreId = null;
         document.getElementById('storeModalTitle').textContent = 'Nueva Tienda / Bot';
-        document.getElementById('sId').value = '';
+        ['sId','sNombre','sPrompt','sApiKey','sPhoneNumberId','sAccessToken','sPqrEmail','sAdminCalendarEmail','sTelegramToken'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         document.getElementById('sId').disabled = false;
-        document.getElementById('sNombre').value = '';
-        document.getElementById('sPrompt').value = '';
-        document.getElementById('sApiKey').value = '';
-        document.getElementById('sPhoneNumberId').value = '';
-        document.getElementById('sAccessToken').value = '';
-        document.getElementById('sPqrEmail').value = '';
-        document.getElementById('sAdminCalendarEmail').value = '';
-        document.getElementById('sTelegramToken').value = '';
         document.getElementById('sTelegramActive').checked = false;
         document.getElementById('btnSaveStore').textContent = 'Guardar y Crear';
         document.getElementById('storeModal').classList.remove('hidden');
     }
+
+    function editStore(id) {
+        const s = allStores.find(x => x.id === id);
+        if (!s) return;
+        editingStoreId = id;
+        document.getElementById('storeModalTitle').textContent   = 'Editar Tienda / Bot';
+        document.getElementById('sId').value                     = s.id;
+        document.getElementById('sId').disabled                  = true;
+        document.getElementById('sNombre').value                 = s.name;
+        document.getElementById('sPrompt').value                 = s.systemPrompt || '';
+        document.getElementById('sApiKey').value                 = s.openaiApiKey || '';
+        document.getElementById('sPhoneNumberId').value          = s.whatsappPhoneNumberId || '';
+        document.getElementById('sAccessToken').value            = s.whatsappAccessToken || '';
+        document.getElementById('sPqrEmail').value               = s.pqrEmail || '';
+        document.getElementById('sAdminCalendarEmail').value     = s.adminCalendarEmail || '';
+        document.getElementById('sTelegramToken').value          = s.telegramToken || '';
+        document.getElementById('sTelegramActive').checked       = !!s.telegramBotActive;
+        document.getElementById('btnSaveStore').textContent      = 'Guardar Cambios';
+        document.getElementById('storeModal').classList.remove('hidden');
+    }
+
     function closeStoreModal() { document.getElementById('storeModal').classList.add('hidden'); }
 
     async function saveStore() {
-        const id = editingStoreId || document.getElementById('sId').value.trim();
-        const name = document.getElementById('sNombre').value.trim();
+        const id           = editingStoreId || document.getElementById('sId').value.trim();
+        const name         = document.getElementById('sNombre').value.trim();
         const systemPrompt = document.getElementById('sPrompt').value.trim();
-        if (!id || !name) { alert('ID y Nombre son obligatorios'); return; }
-        if (!systemPrompt) { alert('El System Prompt es obligatorio'); return; }
+        if (!id || !name)   { alert('ID y Nombre son obligatorios'); return; }
+        if (!systemPrompt)  { alert('El System Prompt es obligatorio'); return; }
 
-        try {
-            const body = {
-                id, name,
-                systemPrompt,
-                openaiApiKey: document.getElementById('sApiKey').value.trim() || null,
-                whatsappPhoneNumberId: document.getElementById('sPhoneNumberId').value.trim() || null,
-                whatsappAccessToken: document.getElementById('sAccessToken').value.trim() || null,
-                pqrEmail: document.getElementById('sPqrEmail').value.trim() || null,
-                adminCalendarEmail: document.getElementById('sAdminCalendarEmail').value.trim() || null,
-                telegramToken: document.getElementById('sTelegramToken').value.trim() || null,
-                telegramBotActive: document.getElementById('sTelegramActive').checked,
-                isActive: true
-            };
-            const res = await fetch(
-                editingStoreId ? `/dashboard/api/stores/${editingStoreId}` : '/dashboard/api/stores',
-                {
-                    method: editingStoreId ? 'PUT' : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                }
-            );
-            if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Error desconocido'); }
-            closeStoreModal();
-            loadStores();
-        } catch (e) {
-            alert('Error guardando tienda: ' + e.message);
+        const body = {
+            id, name, systemPrompt,
+            openaiApiKey:           document.getElementById('sApiKey').value.trim()          || null,
+            whatsappPhoneNumberId:  document.getElementById('sPhoneNumberId').value.trim()   || null,
+            whatsappAccessToken:    document.getElementById('sAccessToken').value.trim()     || null,
+            pqrEmail:               document.getElementById('sPqrEmail').value.trim()        || null,
+            adminCalendarEmail:     document.getElementById('sAdminCalendarEmail').value.trim() || null,
+            telegramToken:          document.getElementById('sTelegramToken').value.trim()   || null,
+            telegramBotActive:      document.getElementById('sTelegramActive').checked,
+            isActive: true
+        };
+
+        const url    = editingStoreId ? `/dashboard/api/stores/${editingStoreId}` : '/dashboard/api/stores';
+        const method = editingStoreId ? 'PUT' : 'POST';
+        const res    = await safeFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+        if (!res || !res.ok) {
+            const err = await res?.json();
+            alert('Error guardando tienda: ' + (err?.error || 'desconocido'));
+            return;
         }
-    }
-
-    // ═══════════════════════════════════════
-    //  USERS (SuperAdmin Only)
-    // ═══════════════════════════════════════
-    async function loadUsers() {
-        try {
-            const res = await fetch('/dashboard/api/users');
-            if (res.status === 403) return; // No es superadmin
-            const users = await res.json();
-            
-            document.getElementById('tabUsers').style.display = 'flex'; // Mostrar la pestaña
-
-            const grid = document.getElementById('usersGrid');
-            grid.innerHTML = '';
-            
-            users.forEach(u => {
-                const card = document.createElement('div');
-                card.className = 'product-card';
-                card.innerHTML = `
-                    <div class="card-top">
-                        <div class="card-name"><i class="ph ph-user" style="vertical-align:middle;"></i> ${escapeHTML(u.username)}</div>
-                        <span class="card-badge ${u.role === 'superadmin' ? 'badge-active' : ''}" style="background:var(--panel2);">${u.role}</span>
-                    </div>
-                    <div class="card-meta" style="margin-top: 15px;">
-                        <div class="meta-item"><span class="meta-label">Tienda Asignada</span><span class="meta-value">${escapeHTML(u.storeId || 'Acceso Total')}</span></div>
-                    </div>
-                    <div class="card-actions" style="margin-top: 20px;">
-                        <button class="btn-sm danger" style="width:100%; justify-content:center;" onclick="deleteUser('${u.id}', '${escapeHTML(u.username)}')"><i class="ph ph-trash"></i> Revocar Acceso</button>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-            
-            // Llenar selectores de tiendas para el modal de usuario
-            const storeSelect = document.getElementById('uStoreId');
-            storeSelect.innerHTML = '<option value="">Ninguna (SuperAdmin)</option>';
-            allStores.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s.id;
-                opt.textContent = s.name;
-                storeSelect.appendChild(opt);
-            });
-            
-        } catch (e) {
-            console.error('Error loading users:', e);
-        }
-    }
-
-    function openUserModal() {
-        document.getElementById('uUsername').value = '';
-        document.getElementById('uPassword').value = '';
-        document.getElementById('uRole').value = 'store_owner';
-        document.getElementById('uStoreGroup').style.display = 'block';
-        document.getElementById('userModal').classList.remove('hidden');
-    }
-
-    function closeUserModal() {
-        document.getElementById('userModal').classList.add('hidden');
-    }
-
-    async function saveUser() {
-        const username = document.getElementById('uUsername').value.trim();
-        const password = document.getElementById('uPassword').value.trim();
-        const role = document.getElementById('uRole').value;
-        const storeId = document.getElementById('uStoreId').value;
-
-        if (!username || !password) { alert('Usuario y contraseña son obligatorios'); return; }
-
-        try {
-            const res = await fetch('/dashboard/api/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, role, storeId: storeId || null })
-            });
-            if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
-            closeUserModal();
-            loadUsers();
-        } catch (e) {
-            alert('Error creando usuario: ' + e.message);
-        }
-    }
-
-    async function deleteUser(id, username) {
-        if (!confirm(`¿Eliminar acceso del usuario ${username}?`)) return;
-        try {
-            await fetch(`/dashboard/api/users/${id}`, { method: 'DELETE' });
-            loadUsers();
-        } catch (e) {
-            alert('Error eliminando usuario');
-        }
+        closeStoreModal();
+        loadStores();
     }
 
     // ═══════════════════════════════════════
     //  INIT
     // ═══════════════════════════════════════
-    let serverOnline = true;
-
-    function showOfflineBanner(show) {
-        let banner = document.getElementById('offlineBanner');
-        if (!banner) {
-            banner = document.createElement('div');
-            banner.id = 'offlineBanner';
-            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:white;text-align:center;padding:8px;font-size:13px;font-weight:600;transition:transform .3s;';
-            banner.innerHTML = '<i class="ph ph-wifi-slash" style="margin-right:6px;"></i> Servidor desconectado — reconectando automáticamente...';
-            document.body.prepend(banner);
-        }
-        banner.style.transform = show ? 'translateY(0)' : 'translateY(-100%)';
-    }
-
-    async function safeFetch(url) {
-        try {
-            const res = await fetch(url);
-            if (!res.ok) return null;
-            if (!serverOnline) { serverOnline = true; showOfflineBanner(false); }
-            return await res.json();
-        } catch (e) {
-            if (serverOnline) { serverOnline = false; showOfflineBanner(true); }
-            return null;
-        }
-    }
-
-    // Override loadSessions para usar safeFetch
-    const _origLoadSessions = loadSessions;
-    loadSessions = async function() {
-        try {
-            const filterEl = document.getElementById('chatStoreFilter');
-            const storeFilter = filterEl ? filterEl.value : '';
-            const url = storeFilter ? `/dashboard/api/sessions?storeId=${storeFilter}` : '/dashboard/api/sessions';
-            const data = await safeFetch(url);
-            if (data && Array.isArray(data)) {
-                allSessions = data;
-                document.getElementById('chatCount').textContent = allSessions.length;
-                renderSessionsList();
-            }
-        } catch (e) { /* silencioso */ }
-    };
-
     async function initDashboard() {
-        await loadStores();
+        await loadStores();   // cargar tiendas primero (se necesita allStores[0] para productos)
         loadSessions();
         loadProducts();
-        loadUsers();
         setInterval(loadSessions, 5000);
     }
-    
+
     initDashboard();
-</script>
+    </script>
 </body>
 </html>
