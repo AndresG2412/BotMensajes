@@ -18,13 +18,13 @@ const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12 horas
 type ModelEntry = { id: string; tools: boolean };
 
 const SIMPLE_MODEL_CASCADE: ModelEntry[] = [
-    { id: 'gemini-2.0-flash-lite', tools: true },
-    { id: 'gemini-2.5-flash-lite', tools: true },
+    { id: 'gemini-2.0-flash-lite', tools: true  },
+    { id: 'gemini-2.5-flash',      tools: true  },
 ];
 
 const COMPLEX_MODEL_CASCADE: ModelEntry[] = [
-    { id: 'gemini-2.5-flash',      tools: true },
-    { id: 'gemini-2.5-flash-lite', tools: true },
+    { id: 'gemini-2.5-flash',      tools: true  },
+    { id: 'gemini-2.5-flash-lite', tools: false },
 ];
 
 async function createWithCascade(
@@ -79,11 +79,12 @@ function isGreeting(userText: string): boolean {
     return words.length <= 3 && words.some(w => greetingWords.has(w));
 }
 
+// DESPUÉS — umbral más bajo + keywords de confirmación de cita
 function isComplexTask(userText: string, hasMedia: boolean): boolean {
-    if (hasMedia)              return true;
-    if (isGreeting(userText))  return false;
-    if (userText.length > 100) return true;
-    const complexKeywords = /precio|costo|cuánto|vende|comprar|pagar|link|checkout|catálogo|producto|inventario|disponible|imagen|foto|cita|agendar|visita|apartamento|propiedad|habitaci/i;
+    if (hasMedia)             return true;
+    if (isGreeting(userText)) return false;
+    if (userText.length > 20) return true;
+    const complexKeywords = /precio|costo|cuánto|vende|comprar|pagar|link|checkout|catálogo|producto|inventario|disponible|imagen|foto|cita|agendar|visita|apartamento|propiedad|habitaci|mañana|lunes|martes|miércoles|jueves|viernes|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|pm|am|nombre|dirección|teléfono/i;
     return complexKeywords.test(userText);
 }
 
@@ -202,11 +203,11 @@ export async function handleUserMessage(
 
     history.push({ role: 'user', content: contentPayload });
 
-    if (history.length > MAX_HISTORY_LENGTH) {
-        history.splice(1, history.length - MAX_HISTORY_LENGTH);
-    }
-
     await saveMemory(sessionId, storeId, senderPhone, history);
+
+    const historyForModel = history.length > MAX_HISTORY_LENGTH
+        ? [history[0], ...history.slice(history.length - MAX_HISTORY_LENGTH + 1)]
+        : history;
 
     // ── Sanitizar historial (quitar image_url para modelos que no lo soporten) ──
     const sanitizedHistory = history.map(msg => {
@@ -278,6 +279,53 @@ export async function handleUserMessage(
         let finalContent = responseMessage.content || 'Hubo un error de procesamiento.';
         if (finalContent.includes('Demasiadas solicitudes') || finalContent.includes('Too many requests')) {
             finalContent = 'Lo siento, estoy recibiendo muchas consultas en este momento. Por favor, escríbeme de nuevo en unos minutos.';
+        }
+
+        // Bug #2/#3 — Detectar confirmación falsa de cita (modelo respondió en texto sin llamar la herramienta)
+        const appointmentPhrases = /agendad[ao]|registrad[ao]|confirmad[ao]|quedó la cita|cita queda|tu (visita|cita) (es|será|quedó|queda)/i;
+        const toolsCalledThisTurn = history.filter(m => m.role === 'tool').length;
+        const scheduleWasCalled = history.some(
+            m => m.role === 'assistant' && Array.isArray((m as any).tool_calls) &&
+            (m as any).tool_calls.some((tc: any) => tc.function?.name === 'schedule_appointment')
+        );
+
+        if (appointmentPhrases.test(finalContent) && !scheduleWasCalled) {
+            logger.warn(`Sesión ${sessionId}: modelo confirmó cita sin invocar schedule_appointment. Reintentando con tool_choice forzado.`);
+            try {
+                const forced = await createWithCascade(
+                    COMPLEX_MODEL_CASCADE,   // ← fuerza cascada compleja, no la simple
+                    apiKeys,
+                    baseURL,
+                    {
+                        messages: history,
+                        tools: botTools,
+                        tool_choice: { type: 'function', function: { name: 'schedule_appointment' } }
+                    }
+                );
+                const forcedMsg = forced.completion.choices[0].message;
+                if (forcedMsg.tool_calls?.length) {
+                    // Ejecutar la herramienta manualmente
+                    for (const tc of forcedMsg.tool_calls) {
+                        const result = await executeTool(
+                            tc.function.name,
+                            JSON.parse(tc.function.arguments),
+                            storeId, senderPhone, sessionId,
+                            enrichedSystemPrompt, adminCalendarEmail, pqrEmail
+                        );
+                        history.push(forcedMsg);
+                        history.push({ role: 'tool', tool_call_id: tc.id, content: result });
+                    }
+                    // Pedir respuesta final con el resultado de la herramienta
+                    const finalCall = await createWithCascade(
+                        COMPLEX_MODEL_CASCADE, apiKeys, baseURL,
+                        { messages: history, tools: botTools, tool_choice: 'auto' }
+                    );
+                    finalContent = finalCall.completion.choices[0].message.content || finalContent;
+                }
+            } catch (forceErr: any) {
+                logger.error(`Reintento forzado fallido: ${forceErr.message}`);
+                finalContent = 'Perdona, tuve un problema técnico al registrar tu cita. ¿Me confirmas de nuevo el día, la hora y tu nombre completo?';
+            }
         }
 
         history.push({ role: 'assistant', content: finalContent });
