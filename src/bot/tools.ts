@@ -1,10 +1,14 @@
 import OpenAI from 'openai';
 import { searchProducts, getProductById, getAllProducts, getProductRawImages } from '../data/catalog';
-import { getOrderById } from '../data/orders';
 import { clearSession } from '../data/database';
+import { google } from 'googleapis';
 import { logger } from '../utils/logger';
+import axios from 'axios';
+import path from 'path';
 
-// Cola temporal de imágenes pendientes para enviar al cliente
+// ─────────────────────────────────────────
+//  Cola temporal de imágenes pendientes
+// ─────────────────────────────────────────
 export type PendingImage = { mimetype: string; base64: string; caption?: string };
 let pendingImages: PendingImage[] = [];
 
@@ -15,25 +19,25 @@ export function getPendingImages(): PendingImage[] {
 }
 
 function queueImage(base64DataUri: string, caption?: string) {
-    // Parsear "data:image/jpeg;base64,/9j/4Q..." 
     const match = base64DataUri.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-    if (match) {
-        pendingImages.push({ mimetype: match[1], base64: match[2], caption });
-    }
+    if (match) pendingImages.push({ mimetype: match[1], base64: match[2], caption });
 }
 
+// ─────────────────────────────────────────
+//  Definición de tools para OpenAI
+// ─────────────────────────────────────────
 export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     {
         type: 'function',
         function: {
             name: 'search_products',
-            description: 'Busca productos en el catálogo de la tienda de acuerdo a una búsqueda (query). Retorna una lista de productos.',
+            description: 'Busca propiedades en el catálogo de SIS Inmobiliaria según una búsqueda. Úsalo cuando el cliente describa lo que busca (ciudad, tipo, habitaciones, precio, etc.).',
             parameters: {
                 type: 'object',
                 properties: {
                     query: {
                         type: 'string',
-                        description: 'El término de búsqueda (por ejemplo: "audífonos bluetooth", "bicicleta urbana").'
+                        description: 'Término de búsqueda. Ej: "apartamento Pitalito 3 habitaciones", "casa barrio centro".'
                     }
                 },
                 required: ['query']
@@ -44,25 +48,21 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         type: 'function',
         function: {
             name: 'list_all_products',
-            description: 'Obtiene la lista completa de todos los productos disponibles en la tienda. Úsalo cuando el cliente pregunte "qué productos tienes" o si quieres ver todo el catálogo para recomendar algo.',
-            parameters: {
-                type: 'object',
-                properties: {},
-                required: []
-            }
+            description: 'Obtiene todas las propiedades disponibles en el catálogo. Úsalo cuando el cliente pregunte qué propiedades hay disponibles en general.',
+            parameters: { type: 'object', properties: {}, required: [] }
         }
     },
     {
         type: 'function',
         function: {
             name: 'get_product_details',
-            description: 'Obtiene toda la información (incluyendo stock, precio, descripciones, tallas) de un producto específico dado su ID.',
+            description: 'Obtiene todos los detalles de una propiedad específica por su ID (precio, habitaciones, baños, fotos, descripción, etc.).',
             parameters: {
                 type: 'object',
                 properties: {
                     id: {
                         type: 'string',
-                        description: 'El ID exacto del producto (por ejemplo: "audifonos-pro").'
+                        description: 'El ID exacto de la propiedad. Ej: "AP-102".'
                     }
                 },
                 required: ['id']
@@ -72,34 +72,68 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     {
         type: 'function',
         function: {
-            name: 'get_order_status',
-            description: 'Consulta el estado de un pedido del cliente usando el ID de la orden.',
+            name: 'send_product_image',
+            description: 'Envía las fotos de una propiedad al cliente por WhatsApp. Úsalo cuando el cliente pida ver la propiedad o quiera fotos.',
             parameters: {
                 type: 'object',
                 properties: {
-                    order_id: {
+                    product_id: {
                         type: 'string',
-                        description: 'El número de orden. Ejemplo: "ORD-12345".'
+                        description: 'El ID de la propiedad cuyas fotos quieres enviar.'
                     }
                 },
-                required: ['order_id']
+                required: ['product_id']
             }
         }
     },
     {
         type: 'function',
         function: {
-            name: 'generate_payment_link',
-            description: 'Genera un link de pago seguro (Stripe/MercadoPago) para un producto. Úsalo SÓLO cuando el cliente quiera pagar con tarjeta.',
+            name: 'schedule_appointment',
+            description: [
+                'Agenda una cita de visita o revisión de propiedad en Google Calendar.',
+                'SOLO llama esta función cuando el cliente haya confirmado TODOS los datos: nombre, fecha y hora.',
+                'REGLAS ESTRICTAS:',
+                '- La fecha debe ser MÍNIMO el día siguiente al de hoy.',
+                '- La hora debe estar entre 14:00 (2 PM) y 18:00 (6 PM).',
+                '- Si el cliente pide hoy o una hora fuera de ese rango, NO llames esta función: corrígelo primero.',
+                '- NUNCA modifiques ni canceles citas existentes. Solo crea nuevas.',
+                '- NUNCA reveles información de citas de otros clientes.',
+            ].join(' '),
             parameters: {
                 type: 'object',
                 properties: {
-                    product_id: {
+                    client_name: {
                         type: 'string',
-                        description: 'El ID del producto a comprar.'
+                        description: 'Nombre completo del cliente que asistirá.'
+                    },
+                    date: {
+                        type: 'string',
+                        description: 'Fecha en formato YYYY-MM-DD. Debe ser mínimo mañana.'
+                    },
+                    time: {
+                        type: 'string',
+                        description: 'Hora en formato HH:MM (24h). Debe estar entre 14:00 y 18:00.'
+                    },
+                    appointment_type: {
+                        type: 'string',
+                        enum: ['visita_compra', 'visita_arriendo', 'revision_venta'],
+                        description: 'Tipo: visita para comprar, visita para arrendar, o revisión de propiedad para venta.'
+                    },
+                    property_reference: {
+                        type: 'string',
+                        description: 'Referencia o nombre de la propiedad a visitar, si el cliente ya eligió una.'
+                    },
+                    address: {
+                        type: 'string',
+                        description: 'Dirección o punto de referencia para la visita, si aplica.'
+                    },
+                    phone: {
+                        type: 'string',
+                        description: 'Número de WhatsApp del cliente.'
                     }
                 },
-                required: ['product_id']
+                required: ['client_name', 'date', 'time', 'appointment_type']
             }
         }
     },
@@ -107,137 +141,225 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         type: 'function',
         function: {
             name: 'close_conversation',
-            description: 'Cierra y reinicia la conversación actual. Úsalo ÚNICAMENTE cuando el cliente indique claramente que ha terminado, se despida ("gracias, eso es todo", "adiós", "ya no necesito nada más", "chao", etc.), o confirme que no necesita más ayuda. NO lo uses si el cliente solo dice "gracias" en medio de la conversación mientras sigue haciendo preguntas.',
+            description: 'Cierra y reinicia la conversación. Úsalo ÚNICAMENTE cuando el cliente se despida claramente o confirme que ya no necesita más ayuda. NO lo uses si solo dice "gracias" en medio de la conversación.',
             parameters: {
                 type: 'object',
                 properties: {
                     reason: {
                         type: 'string',
-                        description: 'Razón breve del cierre (ej: "cliente se despidió", "compra completada").'
+                        description: 'Razón breve del cierre. Ej: "cliente se despidió", "cita agendada, conversación cerrada".'
                     }
                 },
                 required: ['reason']
             }
         }
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'send_product_image',
-            description: 'Envía la imagen de un producto al cliente por WhatsApp. Úsalo cuando el cliente pida ver un producto, pregunte cómo se ve, o cuando le estés recomendando algo y quieras mostrarle la foto. Puedes usarlo junto con tu respuesta de texto.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    product_id: {
-                        type: 'string',
-                        description: 'El ID del producto cuya imagen quieres enviar.'
-                    }
-                },
-                required: ['product_id']
-            }
-        }
     }
 ];
 
-export async function executeTool(name: string, args: any, storeId: string, senderPhone: string, sessionId?: string, systemPrompt?: string): Promise<string> {
+// ─────────────────────────────────────────
+//  Executor
+// ─────────────────────────────────────────
+export async function executeTool(
+    name: string,
+    args: any,
+    storeId: string,
+    senderPhone: string,
+    sessionId?: string,
+    systemPrompt?: string,
+    adminCalendarEmail?: string,   // ← viene del store config
+    pqrEmail?: string              // ← viene del store config, para mensajes de cambio de cita
+): Promise<string> {
     logger.info(`Ejecutando tool: ${name}`, args);
+
     try {
         switch (name) {
-            case 'search_products':
+
+            // ── Buscar propiedades ──────────────────────────────────────
+            case 'search_products': {
                 const products = await searchProducts(args.query, storeId);
                 if (products.length === 0) {
-                    const allProd = await getAllProducts(storeId);
-                    if (allProd.length > 0) {
-                        return JSON.stringify({ 
-                            nota: "No hay coincidencias exactas para esa palabra, pero aquí tienes otros productos disponibles en la tienda para que analices si alguno le sirve:", 
-                            productos: allProd.slice(0, 10) 
+                    const all = await getAllProducts(storeId);
+                    if (all.length > 0) {
+                        return JSON.stringify({
+                            nota: 'No hay coincidencias exactas, pero aquí hay otras propiedades disponibles:',
+                            propiedades: all.slice(0, 10)
                         });
                     }
-                    return JSON.stringify({ error: "No se encontraron productos y el catálogo está vacío." });
+                    return JSON.stringify({ error: 'No se encontraron propiedades en el catálogo.' });
                 }
                 return JSON.stringify(products);
-                
-            case 'list_all_products':
+            }
+
+            // ── Listar todas ────────────────────────────────────────────
+            case 'list_all_products': {
                 const all = await getAllProducts(storeId);
                 return JSON.stringify(all);
-            
-            case 'get_product_details':
-                const product = await getProductById(args.id, storeId);
-                if (!product) return JSON.stringify({ error: "No se encontró el producto con ese ID." });
-                return JSON.stringify(product);
- 
-            case 'get_order_status':
-                const order = await getOrderById(args.order_id, senderPhone);
-                if (!order) return JSON.stringify({ error: "No se encontró la orden con ese ID o no pertenece a tu número de teléfono." });
-                return JSON.stringify(order);
- 
-            case 'generate_payment_link':
-                // Simulamos un enlace seguro de Stripe o MercadoPago para cumplir con PCI-DSS
-                return JSON.stringify({
-                    success: true,
-                    link: `https://pagos.mitienda.com/checkout-seguro?item=${args.product_id}&gateway=stripe`,
-                    instructions_for_ai: "IMPORTANTE: NO expliques el proceso de pago paso a paso. Envía EXACTAMENTE este aviso al cliente, sin modificarlo: '⚠️ Aviso importante sobre el pago: El proceso de pago se realiza en nuestra plataforma segura. Haz clic en el enlace y sigue las instrucciones que aparecen en pantalla. Por tu seguridad, NUNCA compartas los datos de tu tarjeta por este chat. Si tienes problemas con el pago, contáctanos por este mismo medio y te ayudaremos. 🔒'"
-                });
+            }
 
-            case 'send_product_image':
-                try {
-                    const images = await getProductRawImages(args.product_id, storeId);
-                    if (!images || images.length === 0) {
-                        return JSON.stringify({ success: false, error: 'Esta propiedad no tiene imágenes disponibles.' });
-                    }
-                    const product_info = await getProductById(args.product_id, storeId);
-                    const baseName = product_info ? product_info.name : 'Propiedad';
-                    
-                    const axios = (await import('axios')).default;
-                    let sent = 0;
-                    
-                    for (let i = 0; i < images.length; i++) {
-                        const imageUrl = images[i];
-                        const caption = i === 0 ? `📸 ${baseName} (${images.length} fotos)` : undefined;
-                        try {
-                            if (imageUrl.startsWith('data:')) {
-                                queueImage(imageUrl, caption);
-                            } else {
-                                const response = await axios.get(imageUrl, { 
-                                    responseType: 'arraybuffer',
-                                    timeout: 15000 
-                                });
-                                const contentType = response.headers['content-type'] || 'image/jpeg';
-                                const base64 = Buffer.from(response.data).toString('base64');
-                                pendingImages.push({ mimetype: contentType, base64, caption });
-                            }
-                            sent++;
-                        } catch (dlErr: any) {
-                            logger.error(`Error descargando imagen ${i + 1} de ${baseName}: ${dlErr.message}`);
+            // ── Detalle de una propiedad ────────────────────────────────
+            case 'get_product_details': {
+                const product = await getProductById(args.id, storeId);
+                if (!product) return JSON.stringify({ error: 'No se encontró la propiedad con ese ID.' });
+                return JSON.stringify(product);
+            }
+
+            // ── Enviar fotos de propiedad ───────────────────────────────
+            case 'send_product_image': {
+                const images = await getProductRawImages(args.product_id, storeId);
+                if (!images || images.length === 0) {
+                    return JSON.stringify({ success: false, error: 'Esta propiedad no tiene imágenes disponibles.' });
+                }
+                const productInfo = await getProductById(args.product_id, storeId);
+                const baseName    = productInfo ? productInfo.name : 'Propiedad';
+                let sent = 0;
+
+                for (let i = 0; i < images.length; i++) {
+                    const imageUrl = images[i];
+                    const caption  = i === 0 ? `📸 ${baseName} (${images.length} foto${images.length > 1 ? 's' : ''})` : undefined;
+                    try {
+                        if (imageUrl.startsWith('data:')) {
+                            queueImage(imageUrl, caption);
+                        } else {
+                            const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
+                            const contentType = response.headers['content-type'] || 'image/jpeg';
+                            const base64 = Buffer.from(response.data).toString('base64');
+                            pendingImages.push({ mimetype: contentType, base64, caption });
                         }
+                        sent++;
+                    } catch (dlErr: any) {
+                        logger.error(`Error descargando imagen ${i + 1} de ${baseName}: ${dlErr.message}`);
                     }
-                    
-                    return JSON.stringify({ 
-                        success: true, 
-                        message: `Se enviaron ${sent} imagen(es) de ${baseName} al cliente.`,
-                        instructions_for_ai: 'Las imágenes ya fueron enviadas al cliente. Continúa tu respuesta de texto normalmente, no necesitas describir las imágenes.'
-                    });
-                } catch (imgErr: any) {
-                    logger.error(`Error enviando imágenes de propiedad: ${imgErr.message}`);
-                    return JSON.stringify({ success: false, error: 'No se pudieron enviar las imágenes de la propiedad.' });
                 }
 
-            case 'close_conversation':
+                return JSON.stringify({
+                    success: true,
+                    message: `Se enviaron ${sent} imagen(es) de ${baseName}.`,
+                    instructions_for_ai: 'Las imágenes ya fueron enviadas. Continúa tu respuesta de texto normalmente.'
+                });
+            }
+
+            // ── Agendar cita en Google Calendar ────────────────────────
+            case 'schedule_appointment': {
+                const { client_name, date, time, appointment_type, property_reference, address, phone } = args as {
+                    client_name: string;
+                    date: string;
+                    time: string;
+                    appointment_type: 'visita_compra' | 'visita_arriendo' | 'revision_venta';
+                    property_reference?: string;
+                    address?: string;
+                    phone?: string;
+                };
+
+                // ── Validaciones de negocio ──
+                const [year, month, day] = date.split('-').map(Number);
+                const [hour, minute]     = time.split(':').map(Number);
+
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(0, 0, 0, 0);
+
+                const appointmentDate = new Date(year, month - 1, day);
+
+                if (appointmentDate < tomorrow) {
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'La fecha solicitada es hoy o en el pasado. Dile al cliente que la cita más próxima disponible es mañana y pregúntale qué día le queda bien.'
+                    });
+                }
+                if (hour < 14 || hour >= 18) {
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'La hora está fuera del rango permitido (2 PM – 6 PM). Dile al cliente el horario disponible y pregúntale qué hora dentro de ese rango le queda bien.'
+                    });
+                }
+                if (!adminCalendarEmail) {
+                    logger.warn(`schedule_appointment: sin adminCalendarEmail para storeId ${storeId}`);
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'No hay calendario configurado. Dile al cliente que un asesor de SIS Inmobiliaria lo contactará pronto para confirmar la cita.'
+                    });
+                }
+
+                // ── Crear evento en Google Calendar ──
+                try {
+                    const keyFilePath = path.resolve(process.cwd(), 'firebase-key.json');
+                    const auth     = new google.auth.GoogleAuth({
+                        keyFile: keyFilePath,
+                        scopes: ['https://www.googleapis.com/auth/calendar'],
+                    });
+                    const calendar = google.calendar({ version: 'v3', auth });
+
+                    const typeLabels: Record<string, string> = {
+                        visita_compra:   'Visita de compra',
+                        visita_arriendo: 'Visita de arriendo',
+                        revision_venta:  'Revisión de propiedad para venta',
+                    };
+
+                    const startTime = new Date(year, month - 1, day, hour, minute);
+                    const endTime   = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hora
+
+                    await calendar.events.insert({
+                        calendarId: adminCalendarEmail,
+                        requestBody: {
+                            summary: `${typeLabels[appointment_type]} — ${client_name}`,
+                            description: [
+                                `Cliente: ${client_name}`,
+                                phone              ? `WhatsApp: ${phone}`                   : '',
+                                property_reference ? `Propiedad: ${property_reference}`     : '',
+                                address            ? `Dirección / referencia: ${address}`   : '',
+                                `Tipo: ${typeLabels[appointment_type]}`,
+                                `Agendado automáticamente vía bot de WhatsApp — SIS Inmobiliaria`,
+                            ].filter(Boolean).join('\n'),
+                            start: { dateTime: startTime.toISOString(), timeZone: 'America/Bogota' },
+                            end:   { dateTime: endTime.toISOString(),   timeZone: 'America/Bogota' },
+                        },
+                    });
+
+                    const contactInfo = pqrEmail
+                        ? `Si necesitas cambiar o cancelar, escríbenos al correo ${pqrEmail} o espera a que un asesor te contacte.`
+                        : 'Si necesitas cambiar o cancelar, espera a que un asesor de SIS Inmobiliaria te contacte.';
+
+                    return JSON.stringify({
+                        success: true,
+                        confirmed_date: date,
+                        confirmed_time: time,
+                        contact_info: contactInfo,
+                        instructions_for_ai: `La cita quedó registrada. Confirma al cliente: fecha ${date}, hora ${time}, y dile: "${contactInfo}"`
+                    });
+
+                } catch (calErr: any) {
+                    logger.error(`Error creando evento en Google Calendar:`, calErr.message);
+                    if (calErr.response?.data) {
+                        logger.error(`Detalles del error de Calendar API:`, JSON.stringify(calErr.response.data));
+                    }
+                    if (calErr.code) {
+                        logger.error(`Código de error: ${calErr.code}`);
+                    }
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'Hubo un error técnico al registrar la cita. Dile al cliente que un asesor de SIS Inmobiliaria lo contactará pronto para confirmarla manualmente.'
+                    });
+                }
+            }
+
+            // ── Cerrar conversación ─────────────────────────────────────
+            case 'close_conversation': {
                 logger.info(`Cerrando conversación ${sessionId}: ${args.reason}`);
                 if (sessionId && systemPrompt) {
                     await clearSession(sessionId, storeId, senderPhone, systemPrompt);
                 }
                 return JSON.stringify({
                     success: true,
-                    message: 'Conversación cerrada exitosamente.',
-                    instructions_for_ai: 'La conversación ha sido reiniciada. Despídete amablemente del cliente y dile que puede escribir cuando quiera para una nueva consulta.'
+                    instructions_for_ai: 'La conversación fue cerrada. Despídete amablemente y dile que puede escribir cuando quiera para una nueva consulta.'
                 });
+            }
 
             default:
-                return JSON.stringify({ error: "Función no reconocida." });
+                return JSON.stringify({ error: `Función "${name}" no reconocida.` });
         }
+
     } catch (error: any) {
-        logger.error(`Error ejecutando la tool ${name}: ${error.message}`);
-        return JSON.stringify({ error: `Hubo un error inesperado al procesar la tool ${name}` });
+        logger.error(`Error ejecutando tool ${name}: ${error.message}`);
+        return JSON.stringify({ error: `Error inesperado al procesar "${name}". Intenta de nuevo.` });
     }
 }

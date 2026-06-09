@@ -5,27 +5,27 @@ import { botTools, executeTool, getPendingImages, PendingImage } from './tools';
 import { getMemory, saveMemory, getSessionLastActivity, clearSession } from '../data/database';
 import { getAllProducts } from '../data/catalog';
 import { SECURITY_PROMPT } from './prompts';
+import { db } from '../data/connection';
+import { stores } from '../data/schema';
+import { eq } from 'drizzle-orm';
 
-const MAX_HISTORY_LENGTH = 15;
-const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12 horas en milisegundos
+const MAX_HISTORY_LENGTH  = 15;
+const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12 horas
 
-// --- CASCADAS DE MODELOS SEGÚN COMPLEJIDAD ---
-
-// SIMPLE
-const SIMPLE_MODEL_CASCADE = [
-    { id: 'gemini-2.0-flash-lite',    tools: true  },
-    { id: 'gemini-3.1-flash-lite',    tools: true  },
-    { id: 'gemini-2.5-flash-lite',    tools: true  },
-];
-
-// COMPLEJO
-const COMPLEX_MODEL_CASCADE = [
-    { id: 'gemini-2.5-flash',         tools: true  },
-    { id: 'gemini-3.1-flash-lite',    tools: true  },
-    { id: 'gemini-2.5-flash-lite',    tools: true  },
-];
-
+// ─────────────────────────────────────────
+//  Cascadas de modelos
+// ─────────────────────────────────────────
 type ModelEntry = { id: string; tools: boolean };
+
+const SIMPLE_MODEL_CASCADE: ModelEntry[] = [
+    { id: 'gemini-2.0-flash-lite', tools: true },
+    { id: 'gemini-2.5-flash-lite', tools: true },
+];
+
+const COMPLEX_MODEL_CASCADE: ModelEntry[] = [
+    { id: 'gemini-2.5-flash',      tools: true },
+    { id: 'gemini-2.5-flash-lite', tools: true },
+];
 
 async function createWithCascade(
     cascade: ModelEntry[],
@@ -51,7 +51,7 @@ async function createWithCascade(
             } catch (err: any) {
                 lastError = err;
                 const status = err.status ?? err.statusCode;
-                if (status === 429 || status === 503 || status === 500 || status === 404 || status === 400) {
+                if ([400, 404, 429, 500, 503].includes(status)) {
                     logger.warn(`Cascada: ${entry.id} [key ...${apiKey.slice(-4)}] → HTTP ${status}, probando siguiente...`);
                     continue;
                 }
@@ -62,68 +62,69 @@ async function createWithCascade(
     throw lastError;
 }
 
-// --- EVALUADOR DE COMPLEJIDAD DE TAREAS ---
+// ─────────────────────────────────────────
+//  Evaluador de complejidad
+// ─────────────────────────────────────────
 function isGreeting(userText: string): boolean {
     const text = userText.trim().toLowerCase().replace(/[¡!¿?.,]/g, '');
     const greetingWords = new Set([
-        'hola', 'holaa', 'holaaa', 'buenas', 'buen dia', 'buen día', 'buenos dias', 'buenos días',
-        'buenas tardes', 'buenas noches', 'que tal', 'qué tal', 'como estas', 'cómo estás',
-        'como vas', 'cómo vas', 'como va', 'cómo va', 'alo', 'aló', 'hi', 'hello'
+        'hola', 'holaa', 'holaaa', 'buenas', 'buen dia', 'buen día',
+        'buenos dias', 'buenos días', 'buenas tardes', 'buenas noches',
+        'que tal', 'qué tal', 'como estas', 'cómo estás',
+        'como vas', 'cómo vas', 'como va', 'cómo va',
+        'alo', 'aló', 'hi', 'hello',
     ]);
     if (greetingWords.has(text)) return true;
-    
     const words = text.split(/\s+/);
-    if (words.length <= 3 && words.some(word => greetingWords.has(word))) {
-        return true;
-    }
-    return false;
+    return words.length <= 3 && words.some(w => greetingWords.has(w));
 }
 
 function isComplexTask(userText: string, hasMedia: boolean): boolean {
-    if (hasMedia) return true; // Procesamiento multimodal siempre requiere modelo avanzado
-
-    // Si es un saludo, siempre se trata como tarea simple para usar modelos con alta cuota
-    if (isGreeting(userText)) return false;
-
-    // Si el texto supera los 100 caracteres, asumimos que es una consulta detallada
+    if (hasMedia)              return true;
+    if (isGreeting(userText))  return false;
     if (userText.length > 100) return true;
-
-    // Palabras clave que delatan intenciones complejas del negocio (ventas, stock, precios)
-    const complexKeywords = /precio|costo|cuánto|vende|comprar|pagar|link|checkout|catálogo|producto|inventario|disponible|asistente|imagen|foto|catálogo|bici|pedalazo|control/i;
-    
+    const complexKeywords = /precio|costo|cuánto|vende|comprar|pagar|link|checkout|catálogo|producto|inventario|disponible|imagen|foto|cita|agendar|visita|apartamento|propiedad|habitaci/i;
     return complexKeywords.test(userText);
 }
 
+// ─────────────────────────────────────────
+//  Contexto del catálogo
+// ─────────────────────────────────────────
 async function buildCatalogContext(storeId: string): Promise<string> {
     try {
         const products = await getAllProducts(storeId);
         if (products.length === 0) return '';
         const lines = products.map(p => {
             const price = p.price != null ? `$${p.price}` : 'consultar precio';
-            const url = p.checkoutUrl ? ` | Link: ${p.checkoutUrl}` : '';
-            return `- [ID: ${p.id}] ${p.name} — ${price}${url}${p.description ? ` | ${p.description}` : ''}`;
+            return `- [ID: ${p.id}] ${p.name} — ${price}${p.description ? ` | ${p.description}` : ''}`;
         }).join('\n');
-        return `\n\nCATÁLOGO DE PRODUCTOS DISPONIBLES:\n${lines}\n\nCuando el cliente quiera pagar, envíale el link del producto directamente del catálogo anterior. Si no tiene link de pago, dile que te contacte para coordinar.`;
+        return `\n\nPROPIEDADES DISPONIBLES EN CATÁLOGO:\n${lines}\n\nCuando el cliente quiera ver una propiedad, usa send_product_image con el ID correspondiente.`;
     } catch {
         return '';
     }
 }
 
-async function getOrCreateSession(sessionId: string, systemPrompt: string): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
+// ─────────────────────────────────────────
+//  Sesión / historial
+// ─────────────────────────────────────────
+async function getOrCreateSession(
+    sessionId: string,
+    systemPrompt: string
+): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
     const mem = await getMemory(sessionId);
-    if (!mem || mem.length === 0) {
-        return [{ role: 'system', content: systemPrompt }];
-    }
-    if (mem[0].role === 'system') {
-        mem[0].content = systemPrompt;
-    }
+    if (!mem || mem.length === 0) return [{ role: 'system', content: systemPrompt }];
+    if (mem[0].role === 'system') mem[0].content = systemPrompt;
     return mem;
 }
 
-
-
+// ─────────────────────────────────────────
+//  Tipo de respuesta
+// ─────────────────────────────────────────
 export type BotResponse = { text: string; images: PendingImage[] };
 
+// ─────────────────────────────────────────
+//  Handler principal
+// ─────────────────────────────────────────
 export async function handleUserMessage(
     sessionId: string,
     storeId: string,
@@ -131,37 +132,73 @@ export async function handleUserMessage(
     userText: string,
     systemPrompt: string,
     customApiKey: string | null,
-    media?: {mimetype: string, data: string}
+    media?: { mimetype: string; data: string }
 ): Promise<BotResponse> {
 
-    const catalogContext = await buildCatalogContext(storeId);
-    const enrichedSystemPrompt = SECURITY_PROMPT + "\n\n" + systemPrompt + catalogContext;
+    // ── Datos del store (para Calendar y PQR email) ──
+    const store = await db.query.stores.findFirst({ where: eq(stores.id, storeId) });
+    const adminCalendarEmail = store?.adminCalendarEmail ?? '';
+    const pqrEmail           = store?.pqrEmail           ?? '';
 
-    // --- Cierre por inactividad ---
+    // ── Construir system prompt enriquecido ──
+    const catalogContext      = await buildCatalogContext(storeId);
+
+    // Fecha y hora actual en zona horaria de Colombia
+    const nowColombia = new Date().toLocaleString('es-CO', {
+        timeZone: 'America/Bogota',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toLocaleDateString('es-CO', {
+        timeZone: 'America/Bogota',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+
+    const dateContext = `\n\n[CONTEXTO TEMPORAL - INFORMACIÓN CRÍTICA]:\n` +
+        `- Fecha y hora actual: ${nowColombia}\n` +
+        `- Mañana es: ${tomorrowStr}\n` +
+        `- SIEMPRE usa esta fecha como referencia. NUNCA inventes ni adivines la fecha.\n` +
+        `- Si el cliente dice "mañana", la fecha correcta es ${tomorrowStr}.\n` +
+        `- Si el cliente dice "hoy", la fecha es la de arriba.\n`;
+
+    const enrichedSystemPrompt = SECURITY_PROMPT + '\n\n' + systemPrompt + dateContext + catalogContext;
+
+    // ── Cierre por inactividad ──
     const lastActivity = await getSessionLastActivity(sessionId);
     if (lastActivity) {
         const elapsed = Date.now() - lastActivity.getTime();
         if (elapsed > INACTIVITY_TIMEOUT_MS) {
-            logger.info(`Sesión ${sessionId} inactiva por ${Math.round(elapsed / 3600000)}h — reiniciando conversación.`);
+            logger.info(`Sesión ${sessionId} inactiva ${Math.round(elapsed / 3600000)}h — reiniciando.`);
             await clearSession(sessionId, storeId, senderPhone, enrichedSystemPrompt);
         }
     }
 
     const history = await getOrCreateSession(sessionId, enrichedSystemPrompt);
 
+    // ── API keys ──
     const baseURL = config.OPENAI_BASE_URL || undefined;
     const apiKeys = [
         customApiKey || config.OPENAI_API_KEY,
-        ...(config.OPENAI_API_KEY_2 ? [config.OPENAI_API_KEY_2] : [])
-    ].filter(Boolean);
+        ...(config.OPENAI_API_KEY_2 ? [config.OPENAI_API_KEY_2] : []),
+    ].filter(Boolean) as string[];
 
-    let contentPayload: any = userText || "El usuario envió un archivo sin texto.";
-    if (media) {
-        contentPayload = [
-            { type: "text", text: userText || "¿Me puedes decir qué ves en esta foto conectándolo con la tienda?" },
-            { type: "image_url", image_url: { url: `data:${media.mimetype};base64,${media.data}` } }
-        ];
-    }
+    // ── Mensaje del usuario ──
+    const contentPayload: any = media
+        ? [
+            { type: 'text', text: userText || '¿Qué ves en esta foto?' },
+            { type: 'image_url', image_url: { url: `data:${media.mimetype};base64,${media.data}` } },
+          ]
+        : (userText || 'El usuario envió un archivo sin texto.');
 
     history.push({ role: 'user', content: contentPayload });
 
@@ -171,6 +208,7 @@ export async function handleUserMessage(
 
     await saveMemory(sessionId, storeId, senderPhone, history);
 
+    // ── Sanitizar historial (quitar image_url para modelos que no lo soporten) ──
     const sanitizedHistory = history.map(msg => {
         if (Array.isArray((msg as any).content)) {
             const text = (msg as any).content
@@ -182,92 +220,96 @@ export async function handleUserMessage(
         return msg;
     }) as OpenAI.Chat.ChatCompletionMessageParam[];
 
-    // --- ENRUTAMIENTO DINÁMICO DE CASCADA ---
-    const isComplex = isComplexTask(userText, !!media);
+    // ── Selección de cascada ──
+    const isComplex    = isComplexTask(userText, !!media);
     const activeCascade = isComplex ? COMPLEX_MODEL_CASCADE : SIMPLE_MODEL_CASCADE;
-    
-    logger.info(`Sesión ${sessionId} enrutada a cascada: ${isComplex ? 'COMPLEJA' : 'SIMPLE'} (Primer intento: ${activeCascade[0].id})`);
+    logger.info(`Sesión ${sessionId} → cascada ${isComplex ? 'COMPLEJA' : 'SIMPLE'} (${activeCascade[0].id})`);
 
     try {
-        let { completion: aiResponse, usedTools } = await createWithCascade(activeCascade, apiKeys, baseURL, {
-            messages: sanitizedHistory,
-            tools: botTools,
-            tool_choice: 'auto'
-        });
+        let { completion: aiResponse, usedTools } = await createWithCascade(
+            activeCascade, apiKeys, baseURL,
+            { messages: sanitizedHistory, tools: botTools, tool_choice: 'auto' }
+        );
 
         let responseMessage = aiResponse.choices[0].message;
 
-        if (usedTools) {
-            while (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-                history.push(responseMessage);
+        // ── Bucle de tool calls ──
+        while (usedTools && responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+            history.push(responseMessage);
 
-                for (const toolCall of responseMessage.tool_calls) {
-                    try {
-                        const functionName = toolCall.function.name;
-                        const functionArgs = JSON.parse(toolCall.function.arguments);
-                        const functionResult = await executeTool(functionName, functionArgs, storeId, senderPhone, sessionId, enrichedSystemPrompt);
-                        history.push({
-                            role: 'tool',
-                            tool_call_id: toolCall.id,
-                            content: functionResult
-                        });
-                    } catch (parseError) {
-                        logger.error(`Error parseando argumentos de tool ${toolCall.function.name}:`, toolCall.function.arguments);
-                        history.push({
-                            role: 'tool',
-                            tool_call_id: toolCall.id,
-                            content: JSON.stringify({ error: "Argumentos inválidos proporcionados por la IA." })
-                        });
-                    }
+            for (const toolCall of responseMessage.tool_calls) {
+                let functionResult: string;
+                try {
+                    const functionName = toolCall.function.name;
+                    const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                    functionResult = await executeTool(
+                        functionName,
+                        functionArgs,
+                        storeId,
+                        senderPhone,
+                        sessionId,
+                        enrichedSystemPrompt,
+                        adminCalendarEmail,  // ← nuevo
+                        pqrEmail             // ← nuevo
+                    );
+                } catch (parseError) {
+                    logger.error(`Error parseando args de ${toolCall.function.name}:`, toolCall.function.arguments);
+                    functionResult = JSON.stringify({ error: 'Argumentos inválidos proporcionados por la IA.' });
                 }
 
-                // Si entramos en ejecución de herramientas, seguimos asegurando el uso de la cascada activa
-                const next = await createWithCascade(activeCascade, apiKeys, baseURL, {
-                    messages: history,
-                    tools: botTools,
-                    tool_choice: 'auto'
+                history.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    content: functionResult,
                 });
-                aiResponse = next.completion;
-                responseMessage = aiResponse.choices[0].message;
             }
+
+            const next = await createWithCascade(
+                activeCascade, apiKeys, baseURL,
+                { messages: history, tools: botTools, tool_choice: 'auto' }
+            );
+            aiResponse      = next.completion;
+            usedTools       = next.usedTools;
+            responseMessage = aiResponse.choices[0].message;
         }
 
-        let finalContent = responseMessage.content || "Hubo un error de procesamiento.";
-
+        // ── Respuesta final ──
+        let finalContent = responseMessage.content || 'Hubo un error de procesamiento.';
         if (finalContent.includes('Demasiadas solicitudes') || finalContent.includes('Too many requests')) {
-            finalContent = "Lo siento, estoy recibiendo muchas consultas en este momento. Por favor, escríbeme de nuevo en unos minutos.";
+            finalContent = 'Lo siento, estoy recibiendo muchas consultas en este momento. Por favor, escríbeme de nuevo en unos minutos.';
         }
 
         history.push({ role: 'assistant', content: finalContent });
 
-        let finalHistory = history;
-        if (history.length > MAX_HISTORY_LENGTH) {
-            finalHistory = [history[0], ...history.slice(history.length - MAX_HISTORY_LENGTH + 1)];
-        }
+        const finalHistory = history.length > MAX_HISTORY_LENGTH
+            ? [history[0], ...history.slice(history.length - MAX_HISTORY_LENGTH + 1)]
+            : history;
 
         await saveMemory(sessionId, storeId, senderPhone, finalHistory);
 
-        const images = getPendingImages();
-
-        return { text: finalContent, images };
+        return { text: finalContent, images: getPendingImages() };
 
     } catch (error: any) {
-        logger.error(`Error conversacional sesión ${sessionId}:`, error.message, error.status, JSON.stringify(error.error ?? error.response?.data ?? ''));
-        const status = error.status ?? error.statusCode;
-        if (status === 400) {
+        logger.error(
+            `Error sesión ${sessionId}:`, error.message, error.status,
+            JSON.stringify(error.error ?? error.response?.data ?? '')
+        );
+
+        // ── Recuperación ante historial corrupto ──
+        if ((error.status ?? error.statusCode) === 400) {
             logger.warn(`Sesión ${sessionId} con historial corrupto — limpiando y reintentando...`);
             const freshHistory: OpenAI.Chat.ChatCompletionMessageParam[] = [
                 { role: 'system', content: enrichedSystemPrompt },
-                { role: 'user', content: userText || 'Hola' }
+                { role: 'user',   content: userText || 'Hola' },
             ];
             await saveMemory(sessionId, storeId, senderPhone, freshHistory);
             try {
-                const { completion: retryResponse } = await createWithCascade(activeCascade, apiKeys, baseURL, {
-                    messages: freshHistory,
-                    tools: botTools,
-                    tool_choice: 'auto'
-                });
-                const retryContent = retryResponse.choices[0].message.content || "Hubo un error de procesamiento.";
+                const { completion: retryResponse } = await createWithCascade(
+                    activeCascade, apiKeys, baseURL,
+                    { messages: freshHistory, tools: botTools, tool_choice: 'auto' }
+                );
+                const retryContent = retryResponse.choices[0].message.content || 'Hubo un error de procesamiento.';
                 freshHistory.push({ role: 'assistant', content: retryContent });
                 await saveMemory(sessionId, storeId, senderPhone, freshHistory);
                 return { text: retryContent, images: [] };
@@ -275,6 +317,10 @@ export async function handleUserMessage(
                 logger.error(`Reintento fallido para ${sessionId}: ${retryErr.message}`);
             }
         }
-        return { text: "Lo siento, tengo un problema y no te puedo atender en este momento. Escribe de nuevo más tarde.", images: [] };
+
+        return {
+            text: 'Lo siento, tengo un problema técnico en este momento. Por favor escríbeme de nuevo más tarde.',
+            images: [],
+        };
     }
 }

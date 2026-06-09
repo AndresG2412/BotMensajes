@@ -41,11 +41,9 @@
     </style>
 </head>
 <body>
-    <!-- BG Glows -->
     <div class="bg-glow" style="width:400px;height:400px;background:rgba(16,185,129,0.06);top:-100px;right:-100px;position:fixed;"></div>
     <div class="bg-glow" style="width:400px;height:400px;background:rgba(59,130,246,0.05);bottom:-100px;left:-100px;position:fixed;"></div>
 
-    <!-- ───── HEADER ───── -->
     <header class="glass">
         <div class="logo">
             <div class="logo-icon"><i class="ph ph-robot"></i></div>
@@ -71,10 +69,8 @@
         </div>
     </header>
 
-    <!-- ───── MAIN ───── -->
     <main>
 
-        <!-- ===== CHATS TAB ===== -->
         <div class="tab-page active" id="pageChats">
             <div class="chat-layout">
                 <aside class="sidebar glass">
@@ -121,7 +117,6 @@
             </div>
         </div>
 
-        <!-- ===== PRODUCTS TAB ===== -->
         <div class="tab-page" id="pageProducts">
             <div class="products-layout">
                 <div class="products-toolbar">
@@ -136,22 +131,17 @@
             </div>
         </div>
 
-        <!-- ===== BOTS TAB ===== -->
         <div class="tab-page" id="pageBots">
             <div class="products-layout">
                 <div class="products-toolbar">
                     <h2><i class="ph ph-robot" style="vertical-align:middle;margin-right:6px;"></i> Administrador de Bots</h2>
-                    <button class="btn-primary" onclick="openStoreModal()">
-                        <i class="ph ph-plus-circle"></i> Añadir Nueva Tienda
-                    </button>
-                </div>
+                    </div>
                 <div class="bots-grid" id="botsGrid"></div>
             </div>
         </div>
 
     </main>
 
-    <!-- ───── MODAL PROPIEDAD ───── -->
     <div class="modal-overlay hidden" id="productModal">
         <div class="modal">
             <div class="modal-header">
@@ -246,61 +236,22 @@
         </div>
     </div>
 
-    <!-- ───── MODAL TIENDA ───── -->
     <div class="modal-overlay hidden" id="storeModal">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="storeModalTitle">Nueva Tienda / Bot</h3>
+                <h3 id="storeModalTitle">Configurar Correo de Citas</h3>
                 <button class="btn-icon" onclick="closeStoreModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>ID único de la tienda (sin espacios)</label>
-                    <input type="text" id="sId" placeholder="ej: hotmart-magnesio">
-                </div>
-                <div class="form-group">
-                    <label>Nombre comercial</label>
-                    <input type="text" id="sNombre" placeholder="ej: Tienda Salud Natural">
-                </div>
-                <div class="form-group">
-                    <label>System Prompt (Instrucciones de la IA) *</label>
-                    <textarea id="sPrompt" placeholder="Eres un vendedor experto en..." style="height:120px;"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>API Key de OpenAI (Opcional)</label>
-                    <input type="password" id="sApiKey" placeholder="sk-...">
-                </div>
-                <div class="form-group">
-                    <label>WhatsApp Phone Number ID (Meta Cloud API)</label>
-                    <input type="text" id="sPhoneNumberId" placeholder="ej: 1046083315259153">
-                </div>
-                <div class="form-group">
-                    <label>WhatsApp Access Token (Meta Cloud API)</label>
-                    <input type="password" id="sAccessToken" placeholder="EAABXHSsk...">
-                </div>
-                <div class="form-group">
-                    <label><i class="ph ph-envelope" style="vertical-align:middle;margin-right:4px;"></i> Correo de PQR / Soporte</label>
-                    <input type="email" id="sPqrEmail" placeholder="ej: soporte@vidasanas.com">
-                    <small style="color:var(--text2);font-size:11px;">El bot dará este correo si el cliente tiene quejas o reclamos.</small>
-                </div>
-                <div class="form-group">
                     <label><i class="ph ph-calendar-check" style="vertical-align:middle;margin-right:4px;"></i> Correo Admin Google Calendar</label>
                     <input type="email" id="sAdminCalendarEmail" placeholder="ej: admin@miempresa.com">
-                </div>
-                <hr style="border:0;border-top:1px solid var(--border);margin:15px 0;">
-                <div class="form-group">
-                    <label><i class="ph ph-telegram-logo" style="vertical-align:middle;margin-right:4px;"></i> Telegram Bot Token (Opcional)</label>
-                    <input type="password" id="sTelegramToken" placeholder="7123456789:AAH...">
-                    <small style="color:var(--text2);font-size:11px;">Obtenlo hablándole a @BotFather en Telegram.</small>
-                </div>
-                <div class="form-group" style="display:flex;align-items:center;gap:10px;">
-                    <input type="checkbox" id="sTelegramActive" style="width:auto;">
-                    <label for="sTelegramActive" style="margin-bottom:0;cursor:pointer;">Activar bot de Telegram</label>
+                    <small style="color:var(--text2);font-size:11px;display:block;margin-top:4px;">Este correo se utilizará para gestionar la agenda automática de citas mediante el bot.</small>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-cancel" onclick="closeStoreModal()">Cancelar</button>
-                <button class="btn-primary" onclick="saveStore()" id="btnSaveStore">Guardar y Crear</button>
+                <button class="btn-primary" onclick="saveStore()" id="btnSaveStore">Guardar Cambios</button>
             </div>
         </div>
     </div>
@@ -316,7 +267,6 @@
     let editingProductId  = null;
     let editingStoreId    = null;
     let currentCaracteristicas = [];
-    // Imágenes: { file: File, previewUrl: string, cloudinaryUrl: string|null, status: 'pending'|'uploaded'|'existing' }
     let currentImages = [];
     let serverOnline  = true;
 
@@ -662,7 +612,6 @@
             };
             reader.readAsDataURL(file);
         });
-        // Reset input so same files can be re-selected
         document.getElementById('pFotos').value = '';
     }
 
@@ -687,13 +636,12 @@
         });
     }
 
-    // Sube todas las imágenes pendientes a Cloudinary vía backend y retorna las URLs
     async function uploadPendingImages(referencia) {
         const pending = currentImages.filter(img => img.status === 'pending');
         if (pending.length === 0) return;
 
         const folder = referencia || 'sin-referencia';
-        const base64List = pending.map(img => img.previewUrl); // ya es base64 data URL
+        const base64List = pending.map(img => img.previewUrl);
 
         document.getElementById('uploadProgress').style.display = 'block';
         document.getElementById('uploadProgressText').textContent = `Subiendo ${pending.length} imagen(es)...`;
@@ -709,7 +657,6 @@
         if (!res || !res.ok) throw new Error('Error subiendo imágenes a Cloudinary');
         const { urls } = await res.json();
 
-        // Actualizar estado local
         let urlIndex = 0;
         currentImages.forEach(img => {
             if (img.status === 'pending') {
@@ -763,7 +710,6 @@
         document.getElementById('pMetros').value             = p.metros_cuadrados || '';
         document.getElementById('pFotos').value              = '';
         currentCaracteristicas = Array.isArray(p.caracteristicas) ? [...p.caracteristicas] : [];
-        // Las imágenes existentes van como "existing" (ya tienen URL de Cloudinary)
         currentImages = (Array.isArray(p.imagenes) ? p.imagenes : []).map(url => ({
             file: null, previewUrl: url, cloudinaryUrl: url, status: 'existing'
         }));
@@ -780,7 +726,6 @@
         const nombre = document.getElementById('pNombre').value.trim();
         if (!nombre) { alert('El nombre es obligatorio'); return; }
 
-        // Tomar siempre la única tienda disponible
         const storeId = allStores.length > 0 ? allStores[0].id : null;
         if (!storeId) { alert('No hay ninguna tienda configurada. Ve a "Mis Datos" y crea una.'); return; }
 
@@ -792,10 +737,8 @@
         btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite"></i> Guardando...';
 
         try {
-            // 1. Subir imágenes pendientes a Cloudinary
             await uploadPendingImages(referencia);
 
-            // 2. Construir array final de URLs
             const imagenes = currentImages
                 .filter(img => img.cloudinaryUrl)
                 .map(img => img.cloudinaryUrl);
@@ -815,7 +758,6 @@
                 imagenes,
                 imagen_url:       imagenes[0] || '',
                 folderCloudinary: referencia,
-                // Campos heredados requeridos por el mapper del backend
                 categoria:        'propiedad',
                 descripcion_corta: document.getElementById('pBarrio').value.trim(),
                 descripcion_larga: currentCaracteristicas.join(', '),
@@ -851,11 +793,10 @@
         if (res && res.ok) await loadProducts();
         else {
             const err = await res?.json();
-            alert('Error eliminando: ' + (err?.error || 'desconocido'));
+            alert('Error deleting: ' + (err?.error || 'desconocido'));
         }
     }
 
-    // ── Drag & Drop ──
     const dropZone = document.getElementById('dropZone');
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
@@ -910,7 +851,7 @@
                     <button class="btn-primary" style="width:100%;justify-content:center;" onclick="startBot('${s.id}')">Iniciar Bot / Conectar</button>
                 </div>
                 <div style="display:flex;gap:10px;">
-                    <button class="btn-sm" style="flex:1;justify-content:center;" onclick="editStore('${s.id}')"><i class="ph ph-pencil-simple"></i> Editar</button>
+                    <button class="btn-sm" style="flex:1;justify-content:center;" onclick="editStore('${s.id}')"><i class="ph ph-pencil-simple"></i> Configurar Citas</button>
                     <button class="btn-sm danger" style="flex:1;justify-content:center;" onclick="deleteStore('${s.id}','${escapeHTML(s.name)}')"><i class="ph ph-trash"></i> Eliminar</button>
                 </div>`;
             grid.appendChild(card);
@@ -965,35 +906,12 @@
         loadStores();
     }
 
-    function openStoreModal() {
-        editingStoreId = null;
-        document.getElementById('storeModalTitle').textContent = 'Nueva Tienda / Bot';
-        ['sId','sNombre','sPrompt','sApiKey','sPhoneNumberId','sAccessToken','sPqrEmail','sAdminCalendarEmail','sTelegramToken'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        document.getElementById('sId').disabled = false;
-        document.getElementById('sTelegramActive').checked = false;
-        document.getElementById('btnSaveStore').textContent = 'Guardar y Crear';
-        document.getElementById('storeModal').classList.remove('hidden');
-    }
-
     function editStore(id) {
         const s = allStores.find(x => x.id === id);
         if (!s) return;
         editingStoreId = id;
-        document.getElementById('storeModalTitle').textContent   = 'Editar Tienda / Bot';
-        document.getElementById('sId').value                     = s.id;
-        document.getElementById('sId').disabled                  = true;
-        document.getElementById('sNombre').value                 = s.name;
-        document.getElementById('sPrompt').value                 = s.systemPrompt || '';
-        document.getElementById('sApiKey').value                 = s.openaiApiKey || '';
-        document.getElementById('sPhoneNumberId').value          = s.whatsappPhoneNumberId || '';
-        document.getElementById('sAccessToken').value            = s.whatsappAccessToken || '';
-        document.getElementById('sPqrEmail').value               = s.pqrEmail || '';
+        document.getElementById('storeModalTitle').textContent   = 'Configurar Correo de Citas';
         document.getElementById('sAdminCalendarEmail').value     = s.adminCalendarEmail || '';
-        document.getElementById('sTelegramToken').value          = s.telegramToken || '';
-        document.getElementById('sTelegramActive').checked       = !!s.telegramBotActive;
         document.getElementById('btnSaveStore').textContent      = 'Guardar Cambios';
         document.getElementById('storeModal').classList.remove('hidden');
     }
@@ -1001,31 +919,31 @@
     function closeStoreModal() { document.getElementById('storeModal').classList.add('hidden'); }
 
     async function saveStore() {
-        const id           = editingStoreId || document.getElementById('sId').value.trim();
-        const name         = document.getElementById('sNombre').value.trim();
-        const systemPrompt = document.getElementById('sPrompt').value.trim();
-        if (!id || !name)   { alert('ID y Nombre son obligatorios'); return; }
-        if (!systemPrompt)  { alert('El System Prompt es obligatorio'); return; }
-
+        const id = editingStoreId;
+        const currentStore = allStores.find(x => x.id === id) || {};
+        
+        // Se preservan los datos actuales de la tienda y se mapea el nuevo valor de Calendar de forma limpia
         const body = {
-            id, name, systemPrompt,
-            openaiApiKey:           document.getElementById('sApiKey').value.trim()          || null,
-            whatsappPhoneNumberId:  document.getElementById('sPhoneNumberId').value.trim()   || null,
-            whatsappAccessToken:    document.getElementById('sAccessToken').value.trim()     || null,
-            pqrEmail:               document.getElementById('sPqrEmail').value.trim()        || null,
-            adminCalendarEmail:     document.getElementById('sAdminCalendarEmail').value.trim() || null,
-            telegramToken:          document.getElementById('sTelegramToken').value.trim()   || null,
-            telegramBotActive:      document.getElementById('sTelegramActive').checked,
+            id,
+            name:                  currentStore.name || 'Bot de Tienda',
+            systemPrompt:          currentStore.systemPrompt || 'Eres un vendedor experto.',
+            openaiApiKey:          currentStore.openaiApiKey || null,
+            whatsappPhoneNumberId: currentStore.whatsappPhoneNumberId || null,
+            whatsappAccessToken:   currentStore.whatsappAccessToken || null,
+            pqrEmail:              currentStore.pqrEmail || null,
+            adminCalendarEmail:    document.getElementById('sAdminCalendarEmail').value.trim() || null,
+            telegramToken:         currentStore.telegramToken || null,
+            telegramBotActive:     !!currentStore.telegramBotActive,
             isActive: true
         };
 
-        const url    = editingStoreId ? `/dashboard/api/stores/${editingStoreId}` : '/dashboard/api/stores';
-        const method = editingStoreId ? 'PUT' : 'POST';
+        const url    = `/dashboard/api/stores/${editingStoreId}`;
+        const method = 'PUT';
         const res    = await safeFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
         if (!res || !res.ok) {
             const err = await res?.json();
-            alert('Error guardando tienda: ' + (err?.error || 'desconocido'));
+            alert('Error guardando configuración: ' + (err?.error || 'desconocido'));
             return;
         }
         closeStoreModal();
@@ -1036,7 +954,7 @@
     //  INIT
     // ═══════════════════════════════════════
     async function initDashboard() {
-        await loadStores();   // cargar tiendas primero (se necesita allStores[0] para productos)
+        await loadStores();
         loadSessions();
         loadProducts();
         setInterval(loadSessions, 5000);
@@ -1044,5 +962,6 @@
 
     initDashboard();
     </script>
-</body>
+
+    </body>
 </html>
