@@ -92,13 +92,14 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             name: 'schedule_appointment',
             description: [
                 'Agenda una cita de visita o revisión de propiedad en Google Calendar.',
-                'SOLO llama esta función cuando el cliente haya confirmado TODOS los datos: nombre, fecha y hora.',
+                'SOLO llama esta función cuando el cliente haya confirmado TODOS los datos: nombre, ciudad, fecha y hora.',
                 'REGLAS ESTRICTAS:',
+                '- Debes preguntar obligatoriamente la CIUDAD donde se realizará o desea la cita.',
                 '- La fecha debe ser MÍNIMO el día siguiente al de hoy.',
                 '- La hora debe estar entre 14:00 (2 PM) y 18:00 (6 PM).',
                 '- Si el cliente pide hoy o una hora fuera de ese rango, NO llames esta función: corrígelo primero.',
                 '- NUNCA modifiques ni canceles citas existentes. Solo crea nuevas.',
-                '- NUNCA reveles información de citas de otros clientes.',
+                '- NUNCA reveles información de citas de otros clientes ni de sus fechas.'
             ].join(' '),
             parameters: {
                 type: 'object',
@@ -106,6 +107,10 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     client_name: {
                         type: 'string',
                         description: 'Nombre completo del cliente que asistirá.'
+                    },
+                    city: {
+                        type: 'string',
+                        description: 'Ciudad de Colombia donde se solicita la cita o donde está la propiedad. Ej: "Pitalito", "Florencia", "Cali".'
                     },
                     date: {
                         type: 'string',
@@ -133,7 +138,7 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                         description: 'Número de WhatsApp del cliente.'
                     }
                 },
-                required: ['client_name', 'date', 'time', 'appointment_type']
+                required: ['client_name', 'city', 'date', 'time', 'appointment_type']
             }
         }
     },
@@ -166,8 +171,8 @@ export async function executeTool(
     senderPhone: string,
     sessionId?: string,
     systemPrompt?: string,
-    adminCalendarEmail?: string,   // ← viene del store config
-    pqrEmail?: string              // ← viene del store config, para mensajes de cambio de cita
+    adminCalendarEmail?: string,   
+    pqrEmail?: string              
 ): Promise<string> {
     logger.info(`Ejecutando tool: ${name}`, args);
 
@@ -210,12 +215,12 @@ export async function executeTool(
                     return JSON.stringify({ success: false, error: 'Esta propiedad no tiene imágenes disponibles.' });
                 }
                 const productInfo = await getProductById(args.product_id, storeId);
-                const baseName    = productInfo ? productInfo.name : 'Propiedad';
+                const baseName = productInfo ? productInfo.name : 'Propiedad';
                 let sent = 0;
 
                 for (let i = 0; i < images.length; i++) {
                     const imageUrl = images[i];
-                    const caption  = i === 0 ? `📸 ${baseName} (${images.length} foto${images.length > 1 ? 's' : ''})` : undefined;
+                    const caption = i === 0 ? `📸 ${baseName} (${images.length} foto${images.length > 1 ? 's' : ''})` : undefined;
                     try {
                         if (imageUrl.startsWith('data:')) {
                             queueImage(imageUrl, caption);
@@ -240,8 +245,9 @@ export async function executeTool(
 
             // ── Agendar cita en Google Calendar ────────────────────────
             case 'schedule_appointment': {
-                const { client_name, date, time, appointment_type, property_reference, address, phone } = args as {
+                const { client_name, city, date, time, appointment_type, property_reference, address, phone } = args as {
                     client_name: string;
+                    city: string;
                     date: string;
                     time: string;
                     appointment_type: 'visita_compra' | 'visita_arriendo' | 'revision_venta';
@@ -250,9 +256,9 @@ export async function executeTool(
                     phone?: string;
                 };
 
-                // ── Validaciones de negocio ──
+                // ── Validaciones de negocio iniciales ──
                 const [year, month, day] = date.split('-').map(Number);
-                const [hour, minute]     = time.split(':').map(Number);
+                const [hour, minute] = time.split(':').map(Number);
 
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
@@ -280,38 +286,59 @@ export async function executeTool(
                     });
                 }
 
-                // ── Crear evento en Google Calendar ──
+                // ── Flujo con Google Calendar API ──
                 try {
                     const keyFilePath = path.resolve(process.cwd(), 'firebase-key.json');
-                    const auth     = new google.auth.GoogleAuth({
+                    const auth = new google.auth.GoogleAuth({
                         keyFile: keyFilePath,
                         scopes: ['https://www.googleapis.com/auth/calendar'],
                     });
                     const calendar = google.calendar({ version: 'v3', auth });
 
                     const typeLabels: Record<string, string> = {
-                        visita_compra:   'Visita de compra',
+                        visita_compra: 'Visita de compra',
                         visita_arriendo: 'Visita de arriendo',
-                        revision_venta:  'Revisión de propiedad para venta',
+                        revision_venta: 'Revisión de propiedad para venta',
                     };
 
                     const startTime = new Date(year, month - 1, day, hour, minute);
-                    const endTime   = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hora
+                    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // Duración fija: 1 hora
 
+                    // ── VERIFICACIÓN DE DISPONIBILIDAD (Cruces de Horarios) ──
+                    // Buscamos cualquier evento que se solape con el rango de la cita propuesta
+                    const existingEvents = await calendar.events.list({
+                        calendarId: adminCalendarEmail,
+                        timeMin: startTime.toISOString(),
+                        timeMax: endTime.toISOString(),
+                        singleEvents: true,
+                        maxResults: 1 // Con que encuentre 1 es suficiente para saber que está ocupado
+                    });
+
+                    if (existingEvents.data.items && existingEvents.data.items.length > 0) {
+                        logger.warn(`Conflicto de horario detectado para la fecha ${date} a las ${time}`);
+                        return JSON.stringify({
+                            success: false,
+                            error: 'Horario ocupado',
+                            instructions_for_ai: `El horario de las ${time} del día ${date} ya está reservado por otra persona. Dile de forma muy amable al cliente que ese espacio no está disponible e invítalo a proponer otra hora (entre 2 PM y 6 PM) u otra fecha.`
+                        });
+                    }
+
+                    // ── Crear evento si el horario está libre ──
                     await calendar.events.insert({
                         calendarId: adminCalendarEmail,
                         requestBody: {
-                            summary: `${typeLabels[appointment_type]} — ${client_name}`,
+                            summary: `${typeLabels[appointment_type]} (${city}) — ${client_name}`,
                             description: [
                                 `Cliente: ${client_name}`,
-                                phone              ? `WhatsApp: ${phone}`                   : '',
-                                property_reference ? `Propiedad: ${property_reference}`     : '',
-                                address            ? `Dirección / referencia: ${address}`   : '',
+                                `Ciudad: ${city}`,
+                                phone ? `WhatsApp: ${phone}` : '',
+                                property_reference ? `Propiedad: ${property_reference}` : '',
+                                address ? `Dirección / referencia: ${address}` : '',
                                 `Tipo: ${typeLabels[appointment_type]}`,
                                 `Agendado automáticamente vía bot de WhatsApp — SIS Inmobiliaria`,
                             ].filter(Boolean).join('\n'),
                             start: { dateTime: startTime.toISOString(), timeZone: 'America/Bogota' },
-                            end:   { dateTime: endTime.toISOString(),   timeZone: 'America/Bogota' },
+                            end: { dateTime: endTime.toISOString(), timeZone: 'America/Bogota' },
                         },
                     });
 
@@ -323,8 +350,9 @@ export async function executeTool(
                         success: true,
                         confirmed_date: date,
                         confirmed_time: time,
+                        city: city,
                         contact_info: contactInfo,
-                        instructions_for_ai: `La cita quedó registrada. Confirma al cliente: fecha ${date}, hora ${time}, y dile: "${contactInfo}"`
+                        instructions_for_ai: `La cita quedó registrada con éxito en la ciudad de ${city}. Confirma al cliente: fecha ${date}, hora ${time}, y dile: "${contactInfo}"`
                     });
 
                 } catch (calErr: any) {
@@ -332,12 +360,9 @@ export async function executeTool(
                     if (calErr.response?.data) {
                         logger.error(`Detalles del error de Calendar API:`, JSON.stringify(calErr.response.data));
                     }
-                    if (calErr.code) {
-                        logger.error(`Código de error: ${calErr.code}`);
-                    }
                     return JSON.stringify({
                         success: false,
-                        instructions_for_ai: 'Hubo un error técnico al registrar la cita. Dile al cliente que un asesor de SIS Inmobiliaria lo contactará pronto para confirmarla manualmente.'
+                        instructions_for_ai: 'Hubo un error técnico al registrar la cita. Dile al cliente que un asesor de SIS Inmobiliaria lo contactará pronto para confirmar la cita manualmente.'
                     });
                 }
             }
