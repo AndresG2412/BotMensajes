@@ -18,13 +18,15 @@ const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12 horas
 type ModelEntry = { id: string; tools: boolean };
 
 const SIMPLE_MODEL_CASCADE: ModelEntry[] = [
-    { id: 'gemini-2.0-flash-lite', tools: true  },
+    { id: 'gemini-3.1-flash-lite', tools: true  },
     { id: 'gemini-2.5-flash',      tools: true  },
+    { id: 'gemini-3-flash',        tools: true  },
 ];
 
 const COMPLEX_MODEL_CASCADE: ModelEntry[] = [
-    { id: 'gemini-2.5-flash',      tools: true  },
-    { id: 'gemini-2.5-flash-lite', tools: false },
+    { id: 'gemini-3.5-flash',      tools: true  },
+    { id: 'gemini-3.1-flash-lite', tools: true  },
+    { id: 'gemini-2.5-flash-lite', tools: false },  
 ];
 
 async function createWithCascade(
@@ -366,6 +368,7 @@ export async function handleUserMessage(
             }
         }
 
+        const isRateLimit = (error.status ?? error.statusCode) === 429;
         return {
             text: 'Lo siento, tengo un problema técnico en este momento. Por favor escríbeme de nuevo más tarde.',
             images: [],
