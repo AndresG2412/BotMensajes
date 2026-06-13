@@ -1,8 +1,9 @@
 import OpenAI from 'openai';
 import { searchProducts, getProductById, getAllProducts, getProductRawImages } from '../data/catalog';
-import { clearSession } from '../data/database';
+import { clearSession, getSession, setSessionAppointmentFlag, checkPendingAppointment, saveAppointment } from '../data/database';
 import { google } from 'googleapis';
 import { logger } from '../utils/logger';
+import { sendAppointmentNotification } from '../utils/mailer';
 import axios from 'axios';
 import path from 'path';
 
@@ -92,12 +93,13 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             name: 'schedule_appointment',
             description: [
                 'Agenda una cita de visita o revisión de propiedad en Google Calendar.',
-                'SOLO llama esta función cuando el cliente haya confirmado TODOS los datos: nombre, ciudad, fecha y hora.',
+                'SOLO llama esta función cuando el cliente haya proporcionado y confirmado TODOS los datos requeridos en el chat: client_name, phone, city, address, date y time.',
                 'REGLAS ESTRICTAS:',
-                '- Debes preguntar obligatoriamente la CIUDAD donde se realizará o desea la cita.',
+                '- NUNCA inventes, asumas ni completes por tu cuenta ninguno de estos datos si el cliente no los ha dicho explícitamente en la conversación.',
+                '- La fecha y hora deben ser proporcionadas directamente por el cliente.',
                 '- La fecha debe ser MÍNIMO el día siguiente al de hoy.',
                 '- La hora debe estar entre 14:00 (2 PM) y 18:00 (6 PM).',
-                '- Si el cliente pide hoy o una hora fuera de ese rango, NO llames esta función: corrígelo primero.',
+                '- Si el cliente no ha dado todos los datos (nombre, teléfono, ciudad, dirección, fecha y hora), NO llames esta función y continúa el flujo de preguntas paso a paso.',
                 '- NUNCA modifiques ni canceles citas existentes. Solo crea nuevas.',
                 '- NUNCA reveles información de citas de otros clientes ni de sus fechas.'
             ].join(' '),
@@ -131,14 +133,14 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     },
                     address: {
                         type: 'string',
-                        description: 'Dirección o punto de referencia para la visita, si aplica.'
+                        description: 'Dirección o punto de referencia para la visita.'
                     },
                     phone: {
                         type: 'string',
-                        description: 'Número de WhatsApp del cliente.'
+                        description: 'Número de WhatsApp o de contacto del cliente.'
                     }
                 },
-                required: ['client_name', 'city', 'date', 'time', 'appointment_type']
+                required: ['client_name', 'phone', 'city', 'address', 'date', 'time', 'appointment_type']
             }
         }
     },
@@ -256,6 +258,48 @@ export async function executeTool(
                     phone?: string;
                 };
 
+                // ── Validar que todos los campos requeridos estén presentes y no vacíos ──
+                if (
+                    !client_name || !client_name.trim() ||
+                    !city || !city.trim() ||
+                    !date || !date.trim() ||
+                    !time || !time.trim() ||
+                    !appointment_type || !appointment_type.trim() ||
+                    !address || !address.trim() ||
+                    !phone || !phone.trim()
+                ) {
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'Faltan datos obligatorios para poder agendar la cita. Asegúrate de pedir amablemente al cliente cada uno de los siguientes datos que falten o que no estén claros: nombre completo, teléfono de contacto de 10 dígitos, ciudad, dirección o referencia de la propiedad, fecha y hora de la cita.'
+                    });
+                }
+
+                // ── Validar que el número de teléfono sea válido (10 dígitos colombianos) ──
+                const cleanPhone = phone.replace(/\D/g, '');
+                const normalizedPhone = (cleanPhone.startsWith('57') && cleanPhone.length === 12)
+                    ? cleanPhone.slice(2)
+                    : cleanPhone;
+
+                if (normalizedPhone.length !== 10) {
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'El número de teléfono proporcionado no es válido. Debe ser un número de celular de 10 dígitos (por ejemplo, 3123456789). Dile al cliente que por favor proporcione un número de celular válido de 10 dígitos para continuar.'
+                    });
+                }
+
+                // ── Verificar si ya hay una cita agendada en la base de datos o en la sesión ──
+                if (sessionId) {
+                    const hasApp = await checkPendingAppointment(storeId, senderPhone);
+                    if (hasApp) {
+                        const email = pqrEmail || adminCalendarEmail || 'el correo del administrador';
+                        return JSON.stringify({
+                            success: false,
+                            error: 'Cita ya agendada previamente',
+                            instructions_for_ai: `Ya existe una cita agendada previamente en este chat. No puedes agendar otra ni modificarla. Dile al cliente de forma muy amable que para cambiar, cancelar o agendar de nuevo debe contactar al correo del administrador: ${email}`
+                        });
+                    }
+                }
+
                 // ── Validaciones de negocio iniciales ──
                 const [year, month, day] = date.split('-').map(Number);
                 const [hour, minute] = time.split(':').map(Number);
@@ -341,6 +385,36 @@ export async function executeTool(
                             end: { dateTime: endTime.toISOString(), timeZone: 'America/Bogota' },
                         },
                     });
+
+                    // ── Notificar al administrador por correo ──
+                    sendAppointmentNotification({
+                        adminEmail: adminCalendarEmail,
+                        clientName: client_name,
+                        city,
+                        date,
+                        time,
+                        appointmentType: appointment_type,
+                        phone,
+                        propertyReference: property_reference,
+                        address,
+                    });
+
+                    // ── Guardar flag de cita agendada en la sesión y base de datos ──
+                    if (sessionId) {
+                        await setSessionAppointmentFlag(sessionId, true);
+                        await saveAppointment(storeId, senderPhone, {
+                            clientName: client_name,
+                            city,
+                            date,
+                            time,
+                            appointmentType: appointment_type,
+                            propertyReference: property_reference || '',
+                            address: address || '',
+                            phone: phone || '',
+                            status: 'scheduled',
+                            createdAt: new Date()
+                        });
+                    }
 
                     const contactInfo = pqrEmail
                         ? `Si necesitas cambiar o cancelar, escríbenos al correo ${pqrEmail} o espera a que un asesor te contacte.`

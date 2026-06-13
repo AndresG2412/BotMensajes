@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { botTools, executeTool, getPendingImages, PendingImage } from './tools';
-import { getMemory, saveMemory, getSessionLastActivity, clearSession } from '../data/database';
+import { getMemory, saveMemory, getSessionLastActivity, clearSession, getSession, checkPendingAppointment, setSessionAppointmentFlag } from '../data/database';
 import { getAllProducts } from '../data/catalog';
 import { SECURITY_PROMPT } from './prompts';
 import { db } from '../data/connection';
@@ -26,7 +26,7 @@ const SIMPLE_MODEL_CASCADE: ModelEntry[] = [
 const COMPLEX_MODEL_CASCADE: ModelEntry[] = [
     { id: 'gemini-3.5-flash',      tools: true  },
     { id: 'gemini-3.1-flash-lite', tools: true  },
-    { id: 'gemini-2.5-flash-lite', tools: false },  
+    { id: 'gemini-2.5-flash-lite', tools: false },
 ];
 
 async function createWithCascade(
@@ -81,7 +81,6 @@ function isGreeting(userText: string): boolean {
     return words.length <= 3 && words.some(w => greetingWords.has(w));
 }
 
-// DESPUÉS — umbral más bajo + keywords de confirmación de cita
 function isComplexTask(userText: string, hasMedia: boolean): boolean {
     if (hasMedia)             return true;
     if (isGreeting(userText)) return false;
@@ -121,9 +120,26 @@ async function getOrCreateSession(
 }
 
 // ─────────────────────────────────────────
+//  Helpers de respuesta
+// ─────────────────────────────────────────
+
+/** Divide el texto por ||MSG|| y devuelve un array limpio de mensajes. */
+function splitMessages(content: string): string[] {
+    return content
+        .split('||MSG||')
+        .map(m => m.trim())
+        .filter(m => m.length > 0);
+}
+
+/** Construye un BotResponse a partir de texto plano (sin separadores). */
+function singleResponse(text: string, images: PendingImage[] = []): BotResponse {
+    return { text, messages: [text], images };
+}
+
+// ─────────────────────────────────────────
 //  Tipo de respuesta
 // ─────────────────────────────────────────
-export type BotResponse = { text: string; images: PendingImage[] };
+export type BotResponse = { text: string; messages: string[]; images: PendingImage[] };
 
 // ─────────────────────────────────────────
 //  Handler principal
@@ -143,8 +159,14 @@ export async function handleUserMessage(
     const adminCalendarEmail = store?.adminCalendarEmail ?? '';
     const pqrEmail           = store?.pqrEmail           ?? '';
 
+    // ── Consultar si ya hay una cita agendada en la base de datos o en la sesión ──
+    const hasAppointment = await checkPendingAppointment(storeId, senderPhone);
+    if (sessionId) {
+        await setSessionAppointmentFlag(sessionId, hasAppointment);
+    }
+
     // ── Construir system prompt enriquecido ──
-    const catalogContext      = await buildCatalogContext(storeId);
+    const catalogContext = await buildCatalogContext(storeId);
 
     // Fecha y hora actual en zona horaria de Colombia
     const nowColombia = new Date().toLocaleString('es-CO', {
@@ -167,14 +189,30 @@ export async function handleUserMessage(
         day: 'numeric',
     });
 
-    const dateContext = `\n\n[CONTEXTO TEMPORAL - INFORMACIÓN CRÍTICA]:\n` +
+    const dateContext =
+        `\n\n[CONTEXTO TEMPORAL - INFORMACIÓN CRÍTICA]:\n` +
         `- Fecha y hora actual: ${nowColombia}\n` +
         `- Mañana es: ${tomorrowStr}\n` +
         `- SIEMPRE usa esta fecha como referencia. NUNCA inventes ni adivines la fecha.\n` +
         `- Si el cliente dice "mañana", la fecha correcta es ${tomorrowStr}.\n` +
         `- Si el cliente dice "hoy", la fecha es la de arriba.\n`;
 
-    const enrichedSystemPrompt = SECURITY_PROMPT + '\n\n' + systemPrompt + dateContext + catalogContext;
+    // Reemplazar [pqrEmail] por el correo del store o admin en el systemPrompt
+    const contactEmail = pqrEmail || adminCalendarEmail || 'el correo del administrador';
+    const baseSystemPrompt = systemPrompt.replace(/\[pqrEmail\]/g, contactEmail);
+
+    let appointmentInstruction = '';
+    if (hasAppointment) {
+        appointmentInstruction = `
+\n\n[REGLA CRÍTICA - CITA PREVIAMENTE AGENDADA]:
+- Ya hay una cita previamente agendada en este chat.
+- Si el cliente quiere CANCELARLA, CAMBIARLA (reprogramar, modificar) o AGENDAR NUEVAMENTE (agendar otra cita), debes decirle de forma muy amable que debe contactar al correo del administrador: ${contactEmail}.
+- NUNCA intentes agendar otra cita, cambiarla o cancelarla tú mismo.
+- NUNCA uses la herramienta schedule_appointment bajo ninguna circunstancia en este chat.
+`;
+    }
+
+    const enrichedSystemPrompt = SECURITY_PROMPT + '\n\n' + baseSystemPrompt + appointmentInstruction + dateContext + catalogContext;
 
     // ── Cierre por inactividad ──
     const lastActivity = await getSessionLastActivity(sessionId);
@@ -187,6 +225,16 @@ export async function handleUserMessage(
     }
 
     const history = await getOrCreateSession(sessionId, enrichedSystemPrompt);
+
+    // ── Mensaje inicial fijo — sin pasar por el modelo ──
+    const isNewSession = history.length === 1 && history[0].role === 'system';
+    if (isNewSession) {
+        const welcomeMsg = 'Hola, soy Andrés de SIS Inmobiliaria. ¿Estás buscando una propiedad para comprar, arrendar o quieres vender una propiedad?';
+        history.push({ role: 'user',      content: userText || 'Hola' });
+        history.push({ role: 'assistant', content: welcomeMsg });
+        await saveMemory(sessionId, storeId, senderPhone, history);
+        return singleResponse(welcomeMsg);
+    }
 
     // ── API keys ──
     const baseURL = config.OPENAI_BASE_URL || undefined;
@@ -212,7 +260,7 @@ export async function handleUserMessage(
         : history;
 
     // ── Sanitizar historial (quitar image_url para modelos que no lo soporten) ──
-    const sanitizedHistory = history.map(msg => {
+    const sanitizedHistory = historyForModel.map(msg => {
         if (Array.isArray((msg as any).content)) {
             const text = (msg as any).content
                 .filter((p: any) => p.type === 'text')
@@ -224,7 +272,7 @@ export async function handleUserMessage(
     }) as OpenAI.Chat.ChatCompletionMessageParam[];
 
     // ── Selección de cascada ──
-    const isComplex    = isComplexTask(userText, !!media);
+    const isComplex     = isComplexTask(userText, !!media);
     const activeCascade = isComplex ? COMPLEX_MODEL_CASCADE : SIMPLE_MODEL_CASCADE;
     logger.info(`Sesión ${sessionId} → cascada ${isComplex ? 'COMPLEJA' : 'SIMPLE'} (${activeCascade[0].id})`);
 
@@ -253,8 +301,8 @@ export async function handleUserMessage(
                         senderPhone,
                         sessionId,
                         enrichedSystemPrompt,
-                        adminCalendarEmail,  // ← nuevo
-                        pqrEmail             // ← nuevo
+                        adminCalendarEmail,
+                        pqrEmail
                     );
                 } catch (parseError) {
                     logger.error(`Error parseando args de ${toolCall.function.name}:`, toolCall.function.arguments);
@@ -279,15 +327,16 @@ export async function handleUserMessage(
 
         // ── Respuesta final ──
         let finalContent = responseMessage.content || 'Hubo un error de procesamiento.';
+
         if (finalContent.includes('Demasiadas solicitudes') || finalContent.includes('Too many requests')) {
             finalContent = 'Lo siento, estoy recibiendo muchas consultas en este momento. Por favor, escríbeme de nuevo en unos minutos.';
         }
 
-        // Bug #2/#3 — Detectar confirmación falsa de cita (modelo respondió en texto sin llamar la herramienta)
+        // ── Detectar confirmación falsa de cita (modelo respondió en texto sin llamar la herramienta) ──
         const appointmentPhrases = /agendad[ao]|registrad[ao]|confirmad[ao]|quedó la cita|cita queda|tu (visita|cita) (es|será|quedó|queda)/i;
-        const toolsCalledThisTurn = history.filter(m => m.role === 'tool').length;
-        const scheduleWasCalled = history.some(
-            m => m.role === 'assistant' && Array.isArray((m as any).tool_calls) &&
+        const scheduleWasCalled  = history.some(
+            m => m.role === 'assistant' &&
+            Array.isArray((m as any).tool_calls) &&
             (m as any).tool_calls.some((tc: any) => tc.function?.name === 'schedule_appointment')
         );
 
@@ -295,18 +344,17 @@ export async function handleUserMessage(
             logger.warn(`Sesión ${sessionId}: modelo confirmó cita sin invocar schedule_appointment. Reintentando con tool_choice forzado.`);
             try {
                 const forced = await createWithCascade(
-                    COMPLEX_MODEL_CASCADE,   // ← fuerza cascada compleja, no la simple
+                    COMPLEX_MODEL_CASCADE,
                     apiKeys,
                     baseURL,
                     {
                         messages: history,
                         tools: botTools,
-                        tool_choice: { type: 'function', function: { name: 'schedule_appointment' } }
+                        tool_choice: { type: 'function', function: { name: 'schedule_appointment' } },
                     }
                 );
                 const forcedMsg = forced.completion.choices[0].message;
                 if (forcedMsg.tool_calls?.length) {
-                    // Ejecutar la herramienta manualmente
                     for (const tc of forcedMsg.tool_calls) {
                         const result = await executeTool(
                             tc.function.name,
@@ -317,7 +365,6 @@ export async function handleUserMessage(
                         history.push(forcedMsg);
                         history.push({ role: 'tool', tool_call_id: tc.id, content: result });
                     }
-                    // Pedir respuesta final con el resultado de la herramienta
                     const finalCall = await createWithCascade(
                         COMPLEX_MODEL_CASCADE, apiKeys, baseURL,
                         { messages: history, tools: botTools, tool_choice: 'auto' }
@@ -330,7 +377,12 @@ export async function handleUserMessage(
             }
         }
 
-        history.push({ role: 'assistant', content: finalContent });
+        // ── Dividir en mensajes si el modelo usó ||MSG|| ──
+        const outMessages = splitMessages(finalContent);
+
+        // Guardar en historial el texto unificado (sin separadores)
+        const textForHistory = outMessages.join(' ');
+        history.push({ role: 'assistant', content: textForHistory });
 
         const finalHistory = history.length > MAX_HISTORY_LENGTH
             ? [history[0], ...history.slice(history.length - MAX_HISTORY_LENGTH + 1)]
@@ -338,7 +390,7 @@ export async function handleUserMessage(
 
         await saveMemory(sessionId, storeId, senderPhone, finalHistory);
 
-        return { text: finalContent, images: getPendingImages() };
+        return { text: outMessages[0], messages: outMessages, images: getPendingImages() };
 
     } catch (error: any) {
         logger.error(
@@ -362,16 +414,17 @@ export async function handleUserMessage(
                 const retryContent = retryResponse.choices[0].message.content || 'Hubo un error de procesamiento.';
                 freshHistory.push({ role: 'assistant', content: retryContent });
                 await saveMemory(sessionId, storeId, senderPhone, freshHistory);
-                return { text: retryContent, images: [] };
+                return singleResponse(retryContent);
             } catch (retryErr: any) {
                 logger.error(`Reintento fallido para ${sessionId}: ${retryErr.message}`);
             }
         }
 
         const isRateLimit = (error.status ?? error.statusCode) === 429;
-        return {
-            text: 'Lo siento, tengo un problema técnico en este momento. Por favor escríbeme de nuevo más tarde.',
-            images: [],
-        };
+        const errorMsg = isRateLimit
+            ? 'Estoy atendiendo muchas consultas en este momento, dame un momento y escríbeme de nuevo en 1 minuto.'
+            : 'Lo siento, tengo un problema técnico en este momento. Por favor escríbeme de nuevo más tarde.';
+
+        return singleResponse(errorMsg);
     }
 }

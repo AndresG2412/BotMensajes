@@ -550,9 +550,9 @@
             card.innerHTML = `
                 ${imgHTML}
                 <div style="display:grid;grid-template-rows:auto auto 1fr;padding:12px 14px;gap:6px;min-width:0;">
-                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
-                        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="${escapeHTML(p.nombre)}">${escapeHTML(p.nombre)}</span>
-                        ${p.referencia ? `<span style="font-size:10px;color:var(--text3);white-space:nowrap;">${escapeHTML(p.referencia)}</span>` : ''}
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;overflow:hidden;">
+                        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;" title="${escapeHTML(p.nombre)}">${escapeHTML(p.nombre)}</span>
+                        ${p.referencia ? `<span style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0;">${escapeHTML(p.referencia)}</span>` : ''}
                     </div>
                     <div style="display:flex;flex-direction:column;gap:4px;">
                         <span style="font-size:15px;font-weight:700;color:var(--brand);">${priceStr}</span>

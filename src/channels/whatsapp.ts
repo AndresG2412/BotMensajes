@@ -14,26 +14,43 @@ import { SYSTEM_PROMPT } from '../bot/prompts';
 export const whatsappRouter = Router();
 
 // Gestión Multi-Instancia
-const clients = new Map<string, Client>();
-const qrCodes = new Map<string, string>();
+const clients      = new Map<string, Client>();
+const qrCodes      = new Map<string, string>();
 const clientStatus = new Map<string, 'DISCONNECTED' | 'CONNECTING' | 'QR_READY' | 'CONNECTED'>();
 const messageQueues = new Map<string, Promise<void>>();
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helper: enviar múltiples mensajes con delay natural entre ellos
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendMultipleMessages(
+    client: Client,
+    chatId: string,
+    messages: string[],
+    delayMs = 1200
+): Promise<void> {
+    for (let i = 0; i < messages.length; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, delayMs));
+        await client.sendMessage(chatId, messages[i]);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Procesar mensaje pendiente (usado por el job de inactividad del admin)
+// ─────────────────────────────────────────────────────────────────────────────
 export async function processUnansweredMessage(sessionId: string, storeId: string, phone: string) {
     try {
         const memNow = await getMemory(sessionId);
         if (memNow.length === 0) return;
-        
+
         const lastMsg = memNow[memNow.length - 1];
-        if (lastMsg.role !== 'user') return; // Si no es del usuario, no hay nada que responder
+        if (lastMsg.role !== 'user') return;
 
         logger.info(`Procesando mensaje pendiente para ${sessionId}`);
-        
-        // Evitamos que el mensaje se duplique al pasarlo a la IA
+
         memNow.pop();
         await saveMemory(sessionId, storeId, phone, memNow);
 
-        const textToProcess = lastMsg.content as string || "Hola";
+        const textToProcess = lastMsg.content as string || 'Hola';
 
         const client = clients.get(storeId);
         if (!client) {
@@ -45,10 +62,7 @@ export async function processUnansweredMessage(sessionId: string, storeId: strin
 
         const currentQueue = messageQueues.get(sessionId) || Promise.resolve();
         const nextQueue = currentQueue.then(async () => {
-            // Ya asumimos que se despausó antes de llamar a esta función
-            const store = await db.query.stores.findFirst({
-                where: eq(stores.id, storeId)
-            });
+            const store = await db.query.stores.findFirst({ where: eq(stores.id, storeId) });
 
             const typingDelay = Math.floor(Math.random() * 3000) + 2000;
             await new Promise(resolve => setTimeout(resolve, typingDelay));
@@ -61,10 +75,11 @@ export async function processUnansweredMessage(sessionId: string, storeId: strin
                 phone,
                 textToProcess,
                 store?.systemPrompt?.trim() ? store.systemPrompt : defaultPrompt,
-                (store?.openaiApiKey?.trim() || config.OPENAI_API_KEY) || "",
+                (store?.openaiApiKey?.trim() || config.OPENAI_API_KEY) || '',
                 undefined
             );
 
+            // Enviar imágenes primero si las hay
             for (const img of aiResponse.images) {
                 try {
                     const media = new MessageMedia(img.mimetype, img.base64);
@@ -74,9 +89,12 @@ export async function processUnansweredMessage(sessionId: string, storeId: strin
                 }
             }
 
-            await client.sendMessage(messageFrom, aiResponse.text);
+            // Enviar mensajes de texto con delay entre ellos
+            await sendMultipleMessages(client, messageFrom, aiResponse.messages);
+
             await incrementMessageCount(sessionId);
             await recordUserActivity(sessionId);
+
         }).catch(err => logger.error(`Error en cola processUnansweredMessage [${storeId}]: ${err.message}`));
 
         messageQueues.set(sessionId, nextQueue);
@@ -85,15 +103,12 @@ export async function processUnansweredMessage(sessionId: string, storeId: strin
     }
 }
 
-/**
- * Inicializa todos los bots que estén activos en la base de datos
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  Inicializar todos los bots activos
+// ─────────────────────────────────────────────────────────────────────────────
 export async function initializeWhatsAppClient() {
     try {
-        const allStores = await db.query.stores.findMany({
-            where: eq(stores.isActive, true)
-        });
-
+        const allStores = await db.query.stores.findMany({ where: eq(stores.isActive, true) });
         logger.info(`🚀 Iniciando ${allStores.length} instancias de WhatsApp...`);
 
         for (const store of allStores) {
@@ -110,7 +125,7 @@ export async function initializeWhatsAppClient() {
                 const { getAllSessions } = await import('../data/database');
                 const sessions = await getAllSessions();
                 const now = new Date().getTime();
-                
+
                 for (const session of sessions) {
                     if (session.isPaused && session.history && session.history.length > 0) {
                         const lastMsg = session.history[session.history.length - 1];
@@ -119,7 +134,7 @@ export async function initializeWhatsAppClient() {
                                 ? (session.updatedAt as any).getTime()
                                 : new Date(session.updatedAt).getTime();
                             const timeDiff = now - updatedAtTime;
-                            if (timeDiff >= 5 * 60 * 1000) { // 5 minutos exactos
+                            if (timeDiff >= 5 * 60 * 1000) {
                                 logger.info(`Reactivando sesión ${session.sessionId} por inactividad del admin (5 min)`);
                                 await resumeChat(session.sessionId);
                                 await processUnansweredMessage(session.sessionId, session.storeId, session.phone);
@@ -137,9 +152,9 @@ export async function initializeWhatsAppClient() {
     }
 }
 
-/**
- * Arranca una instancia específica de WhatsApp
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  Arrancar una instancia específica
+// ─────────────────────────────────────────────────────────────────────────────
 export async function startBotInstance(storeId: string) {
     if (clients.has(storeId)) {
         logger.warn(`El bot para la tienda ${storeId} ya está en ejecución o iniciado.`);
@@ -153,15 +168,15 @@ export async function startBotInstance(storeId: string) {
         authStrategy: new LocalAuth({ clientId: storeId }),
         puppeteer: {
             args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox', 
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
                 '--disable-gpu',
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
-                '--no-zygote'
-            ]
-        }
+                '--no-zygote',
+            ],
+        },
     });
 
     client.on('qr', (qr) => {
@@ -195,10 +210,10 @@ export async function startBotInstance(storeId: string) {
         try {
             if (message.isStatus || (await message.getChat()).isGroup || message.from.includes('@broadcast')) return;
 
-            // Obtener el número real del contacto (los LIDs @lid no son teléfonos reales)
+            // Resolver número real del contacto (los LIDs @lid no son teléfonos reales)
             let senderPhone = message.from.replace(/@.*$/, '');
             const isLid = message.from.includes('@lid');
-            
+
             if (isLid) {
                 try {
                     const contact = await message.getContact();
@@ -209,61 +224,56 @@ export async function startBotInstance(storeId: string) {
                         try {
                             const formatted = await (contact as any).getFormattedNumber();
                             if (formatted) senderPhone = formatted.replace(/[^0-9]/g, '');
-                        } catch(e) {}
+                        } catch (e) {}
                     }
                 } catch (e: any) {
                     logger.error(`📱 Error resolviendo LID ${message.from}: ${e.message}`);
                 }
                 logger.info(`📱 [${storeId}] LID: ${message.from} → Resuelto: ${senderPhone}`);
             }
-            
-            const userText = message.body;
-            const sessionId = `${storeId}_${senderPhone}`;
 
-            // Handover Humano
+            const userText  = message.body;
+            const sessionId = `${storeId}_${senderPhone}`;
+            const chatId    = message.from;
+
+            // Handover humano
             if (userText.trim().toLowerCase() === '!bot') {
                 await resumeChat(sessionId);
-                await client.sendMessage(message.from, "Bot reactivado correctamente. ¿En qué te puedo ayudar?");
+                await client.sendMessage(chatId, 'Bot reactivado correctamente. ¿En qué te puedo ayudar?');
                 return;
             }
 
             const currentSession = await getSession(sessionId);
-            
+
             if (currentSession?.isPaused) {
-                // Aún en pausa: guardar el mensaje del cliente en el historial para que el admin lo vea
                 try {
                     const history = await getMemory(sessionId);
                     history.push({ role: 'user', content: userText });
                     await saveMemory(sessionId, storeId, senderPhone, history);
-                    // Ya NO usamos setTimeout aquí, el setInterval global lo manejará
                 } catch (e: any) {
                     logger.error(`Error guardando mensaje en modo pausa: ${e.message}`);
                 }
                 return;
             }
 
-            // CONTROL DE GASTO: Rate Limit
-            const limit = await checkRateLimit(sessionId, 50); // 50 mensajes por día
+            // Rate limit
+            const limit = await checkRateLimit(sessionId, 50);
             if (!limit.allowed) {
-                await client.sendMessage(message.from, "Has alcanzado el límite de mensajes por hoy. Podrás seguir chateando mañana. ¡Gracias!");
+                await client.sendMessage(chatId, 'Has alcanzado el límite de mensajes por hoy. Podrás seguir chateando mañana. ¡Gracias!');
                 return;
             }
 
-            // --- Encolar mensajes normales ---
+            // Encolar mensaje
             const currentQueue = messageQueues.get(sessionId) || Promise.resolve();
             const nextQueue = currentQueue.then(async () => {
                 const sessionCheck = await getSession(sessionId);
                 if (sessionCheck?.isPaused) return;
 
-                // Humanización: Delay
+                // Delay de humanización
                 const typingDelay = Math.floor(Math.random() * 3000) + 2000;
                 await new Promise(resolve => setTimeout(resolve, typingDelay));
 
-                // Obtener config de esta tienda específica
-                const store = await db.query.stores.findFirst({
-                    where: eq(stores.id, storeId)
-                });
-
+                const store = await db.query.stores.findFirst({ where: eq(stores.id, storeId) });
                 const defaultPrompt = SYSTEM_PROMPT;
 
                 const aiResponse = await handleUserMessage(
@@ -272,25 +282,26 @@ export async function startBotInstance(storeId: string) {
                     senderPhone,
                     userText,
                     store?.systemPrompt?.trim() ? store.systemPrompt : defaultPrompt,
-                    (store?.openaiApiKey?.trim() || config.OPENAI_API_KEY) || "",
+                    (store?.openaiApiKey?.trim() || config.OPENAI_API_KEY) || '',
                     undefined
                 );
 
-                // Enviar imágenes del producto si las hay
+                // Enviar imágenes primero si las hay
                 for (const img of aiResponse.images) {
                     try {
                         const media = new MessageMedia(img.mimetype, img.base64);
-                        await client.sendMessage(message.from, media, {
-                            caption: img.caption || undefined
-                        });
+                        await client.sendMessage(chatId, media, { caption: img.caption || undefined });
                     } catch (imgErr: any) {
                         logger.error(`Error enviando imagen por WA [${storeId}]: ${imgErr.message}`);
                     }
                 }
 
-                await client.sendMessage(message.from, aiResponse.text);
+                // Enviar mensajes de texto con delay entre ellos
+                await sendMultipleMessages(client, chatId, aiResponse.messages);
+
                 await incrementMessageCount(sessionId);
                 await recordUserActivity(sessionId);
+
             }).catch(err => logger.error(`Error en cola [${storeId}]: ${err.message}`));
 
             messageQueues.set(sessionId, nextQueue);
@@ -301,7 +312,7 @@ export async function startBotInstance(storeId: string) {
     });
 
     clients.set(storeId, client);
-    
+
     try {
         await client.initialize();
     } catch (err: any) {
@@ -314,13 +325,13 @@ export async function startBotInstance(storeId: string) {
     }
 }
 
-/**
- * Funciones de utilidad para el Dashboard
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  Utilidades del Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
 export function getBotStatus(storeId: string) {
     return {
         status: clientStatus.get(storeId) || 'DISCONNECTED',
-        qr: qrCodes.get(storeId) || null
+        qr:     qrCodes.get(storeId)      || null,
     };
 }
 
@@ -373,4 +384,3 @@ export async function sendWhatsAppMessage(storeId: string, to: string, text: str
         logger.error(`❌ Error enviando desde [${storeId}]: ${error.message}`);
     }
 }
-
