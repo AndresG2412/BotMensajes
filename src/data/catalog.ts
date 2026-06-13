@@ -4,7 +4,8 @@ import { logger } from '../utils/logger';
 export type Product = {
     id: string;
     storeId: string;
-    name: string;          // barrio + referencia
+    name: string;          // display name derivado
+    nombre: string;        // nombre guardado por el usuario
     description: string;   // características formateadas
     productType: string;   // siempre 'propiedad'
     price: number;         // precio
@@ -21,6 +22,7 @@ export type Product = {
     referencia: string;
     imagenes: string[];
     folderCloudinary: string;
+    tipo_propiedad: string;
 };
 
 export async function searchProducts(query: string, storeId: string): Promise<Product[]> {
@@ -39,10 +41,15 @@ function mapDocToProduct(doc: FirebaseFirestore.DocumentSnapshot): Product {
     const data = doc.data() || {};
     const barrio = data.barrio || '';
     const referencia = data.referencia || doc.id;
+    const nombre = data.nombre || '';
     const imagenes: string[] = Array.isArray(data.Imagenes) ? data.Imagenes : [];
     const caracteristicas: string[] = Array.isArray(data.caracteristicas) ? data.caracteristicas : [];
 
+    // Display name: usa nombre guardado, o fallback a barrio — referencia
+    const displayName = nombre || (barrio ? `${barrio} — ${referencia}` : referencia);
+
     const description = [
+        data.tipo_propiedad ? `Tipo de propiedad: ${data.tipo_propiedad}` : '',
         data.ciudad ? `Ciudad: ${data.ciudad}` : '',
         data.habitaciones ? `Habitaciones: ${data.habitaciones}` : '',
         data.baños ? `Baños: ${data.baños}` : '',
@@ -54,7 +61,8 @@ function mapDocToProduct(doc: FirebaseFirestore.DocumentSnapshot): Product {
     return {
         id: doc.id,
         storeId: data.storeId || 'default',
-        name: barrio ? `${barrio} — ${referencia}` : referencia,
+        name: displayName,
+        nombre,
         description,
         productType: 'propiedad',
         price: data.precio || 0,
@@ -70,6 +78,7 @@ function mapDocToProduct(doc: FirebaseFirestore.DocumentSnapshot): Product {
         referencia,
         imagenes,
         folderCloudinary: data.FolderCloudinary || '',
+        tipo_propiedad: data.tipo_propiedad || '',
     };
 }
 
@@ -120,6 +129,7 @@ export async function createProduct(product: Partial<Product>, storeId: string):
     try {
         const db = firebaseAdmin.firestore();
         const newProduct = {
+            nombre: product.nombre || '',
             barrio: product.barrio || '',
             baños: product.baños || '',
             caracteristicas: product.caracteristicas || [],
@@ -131,9 +141,10 @@ export async function createProduct(product: Partial<Product>, storeId: string):
             referencia: product.referencia || id,
             Imagenes: product.imagenes || [],
             FolderCloudinary: product.folderCloudinary || '',
+            tipo_propiedad: product.tipo_propiedad || '',
         };
         await db.collection('Propiedades').doc(id).set(newProduct);
-        return { id, storeId, name: id, description: '', productType: 'propiedad', imageUrl: '', checkoutUrl: '', ...newProduct, price: newProduct.precio, imagenes: newProduct.Imagenes, folderCloudinary: newProduct.FolderCloudinary };
+        return { id, storeId, name: newProduct.nombre || id, nombre: newProduct.nombre, description: '', productType: 'propiedad', imageUrl: '', checkoutUrl: '', ...newProduct, price: newProduct.precio, imagenes: newProduct.Imagenes, folderCloudinary: newProduct.FolderCloudinary, tipo_propiedad: newProduct.tipo_propiedad };
     } catch (e) {
         logger.error(`Error creating product: ${e}`);
         return null;
@@ -149,6 +160,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, store
         if (!doc.exists) return null;
 
         const dbUpdates: any = {};
+        if (updates.nombre !== undefined) dbUpdates.nombre = updates.nombre;
         if (updates.barrio !== undefined) dbUpdates.barrio = updates.barrio;
         if (updates.baños !== undefined) dbUpdates.baños = updates.baños;
         if (updates.caracteristicas !== undefined) dbUpdates.caracteristicas = updates.caracteristicas;
@@ -161,6 +173,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, store
         if (updates.imagenes !== undefined) dbUpdates.Imagenes = updates.imagenes;
         if (updates.folderCloudinary !== undefined) dbUpdates.FolderCloudinary = updates.folderCloudinary;
         if (updates.checkoutUrl !== undefined) dbUpdates.checkoutUrl = updates.checkoutUrl;
+        if (updates.tipo_propiedad !== undefined) dbUpdates.tipo_propiedad = updates.tipo_propiedad;
 
         await docRef.update(dbUpdates);
         const updated = await docRef.get();

@@ -340,7 +340,7 @@ dashboardRouter.get('/api/products', async (req: any, res: Response) => {
     res.json(products.map(p => ({
         id:               p.id,
         storeId:          p.storeId,
-        nombre:           p.name,
+        nombre:           p.nombre           || p.name,
         precio:           p.price,
         imagen_url:       p.imageUrl,
         barrio:           p.barrio           || '',
@@ -353,6 +353,7 @@ dashboardRouter.get('/api/products', async (req: any, res: Response) => {
         referencia:       p.referencia       || p.id,
         imagenes:         p.imagenes         || [],
         folderCloudinary: p.folderCloudinary  || '',
+        tipo_propiedad:   p.tipo_propiedad   || '',
     })));
 });
 
@@ -364,6 +365,7 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
 
         const b = req.body;
         const product = await createProduct({
+            nombre:           b.nombre                   || '',
             name:             b.nombre,
             description:      b.caracteristicas?.join(', ') || '',
             productType:      'propiedad',
@@ -379,6 +381,7 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
             referencia:       b.referencia               || '',
             imagenes:         b.imagenes                 || [],
             folderCloudinary: b.folderCloudinary          || '',
+            tipo_propiedad:   b.tipo_propiedad           || '',
         }, storeId);
 
         res.status(201).json(product);
@@ -396,6 +399,7 @@ dashboardRouter.put('/api/products/:id', async (req: any, res: Response) => {
 
         const b = req.body;
         const updated = await updateProduct(id, {
+            nombre:           b.nombre,
             name:             b.nombre,
             description:      b.caracteristicas?.join(', ') || '',
             productType:      'propiedad',
@@ -411,6 +415,7 @@ dashboardRouter.put('/api/products/:id', async (req: any, res: Response) => {
             referencia:       b.referencia,
             imagenes:         b.imagenes,
             folderCloudinary: b.folderCloudinary,
+            tipo_propiedad:   b.tipo_propiedad,
         }, storeId);
 
         if (!updated) return res.status(404).json({ error: 'Propiedad no encontrada' });

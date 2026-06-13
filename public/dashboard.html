@@ -151,10 +151,21 @@
             <div class="modal-body">
                 <input type="hidden" id="pId">
 
+                <div class="form-group">
+                    <label>Nombre / Título *</label>
+                    <input type="text" id="pNombre" placeholder="Ej: Hermoso Apartamento Campestre">
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Nombre / Título *</label>
-                        <input type="text" id="pNombre" placeholder="Ej: Hermoso Apartamento Campestre">
+                        <label>Tipo de Propiedad</label>
+                        <select id="pTipoPropiedad" class="text-[#F8FAFC] border border-[#2A3441] rounded-[8px] p-2" style="color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px;">
+                            <option value="" style="background-color: var(--panel2); color: var(--text);">Seleccione tipo...</option>
+                            <option value="Casa" style="background-color: var(--panel2); color: var(--text);">Casa</option>
+                            <option value="Apartamento" style="background-color: var(--panel2); color: var(--text);">Apartamento</option>
+                            <option value="Lote" style="background-color: var(--panel2); color: var(--text);">Lote</option>
+                            <option value="Local Comercial" style="background-color: var(--panel2); color: var(--text);">Local Comercial</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Referencia</label>
@@ -557,6 +568,7 @@
                     <div style="display:flex;flex-direction:column;gap:4px;">
                         <span style="font-size:15px;font-weight:700;color:var(--brand);">${priceStr}</span>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;color:var(--text3);font-size:11px;">
+                            ${p.tipo_propiedad ? `<span style="color:var(--brand);font-weight:600;"><i class="ph ph-house-line" style="vertical-align:middle;"></i> ${escapeHTML(p.tipo_propiedad)}</span>` : ''}
                             ${p.habitaciones ? `<span><i class="ph ph-bed" style="vertical-align:middle;"></i> ${p.habitaciones}</span>` : ''}
                             ${p.baños        ? `<span><i class="ph ph-shower" style="vertical-align:middle;"></i> ${p.baños}</span>` : ''}
                             ${p.metros_cuadrados ? `<span><i class="ph ph-ruler" style="vertical-align:middle;"></i> ${p.metros_cuadrados}m²</span>` : ''}
@@ -680,6 +692,7 @@
         document.getElementById('pPrecio').value       = '';
         document.getElementById('pMetros').value       = '';
         document.getElementById('pFotos').value        = '';
+        document.getElementById('pTipoPropiedad').value = '';
         currentCaracteristicas = [];
         currentImages = [];
         renderCaracteristicas();
@@ -709,6 +722,7 @@
         document.getElementById('pPrecio').value             = p.precio || '';
         document.getElementById('pMetros').value             = p.metros_cuadrados || '';
         document.getElementById('pFotos').value              = '';
+        document.getElementById('pTipoPropiedad').value      = p.tipo_propiedad || '';
         currentCaracteristicas = Array.isArray(p.caracteristicas) ? [...p.caracteristicas] : [];
         currentImages = (Array.isArray(p.imagenes) ? p.imagenes : []).map(url => ({
             file: null, previewUrl: url, cloudinaryUrl: url, status: 'existing'
@@ -761,6 +775,7 @@
                 categoria:        'propiedad',
                 descripcion_corta: document.getElementById('pBarrio').value.trim(),
                 descripcion_larga: currentCaracteristicas.join(', '),
+                tipo_propiedad:   document.getElementById('pTipoPropiedad').value,
             };
 
             const url    = editingProductId ? `/dashboard/api/products/${editingProductId}` : '/dashboard/api/products';
