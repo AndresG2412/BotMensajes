@@ -1,6 +1,60 @@
 import { firebaseAdmin } from '../config/firebase';
 import { logger } from '../utils/logger';
 
+export type Categoria = {
+    id: string;
+    nombre: string;
+};
+
+export async function getAllCategorias(): Promise<Categoria[]> {
+    if (!firebaseAdmin) return [];
+    try {
+        const db = firebaseAdmin.firestore();
+        const snapshot = await db.collection('Categorias').get();
+        if (snapshot.empty) {
+            logger.info('Collection "Categorias" is empty. Seeding initial categories...');
+            const initialCats = [
+                { id: 'generales', nombre: 'Propiedades Generales' },
+                { id: 'lotes_1', nombre: 'Lotes Etapa 1' },
+                { id: 'lotes_2_3', nombre: 'Lotes Etapa 2 y 3' }
+            ];
+            for (const cat of initialCats) {
+                await db.collection('Categorias').doc(cat.id).set(cat);
+            }
+            return initialCats;
+        }
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                nombre: data.nombre || doc.id
+            };
+        });
+    } catch (e) {
+        logger.error(`Error getting all categories: ${e}`);
+        return [];
+    }
+}
+
+export async function createCategoria(nombre: string): Promise<Categoria | null> {
+    if (!firebaseAdmin) return null;
+    try {
+        const db = firebaseAdmin.firestore();
+        const id = nombre.toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)+/g, '');
+        const finalId = id || `cat_${Date.now()}`;
+        const newCat = { id: finalId, nombre };
+        await db.collection('Categorias').doc(finalId).set(newCat);
+        return newCat;
+    } catch (e) {
+        logger.error(`Error creating category: ${e}`);
+        return null;
+    }
+}
+
 export type Product = {
     id: string;
     storeId: string;
@@ -23,6 +77,7 @@ export type Product = {
     imagenes: string[];
     folderCloudinary: string;
     tipo_propiedad: string;
+    categoriaId: string;
 };
 
 export async function searchProducts(query: string, storeId: string): Promise<Product[]> {
@@ -76,6 +131,7 @@ function mapDocToProduct(doc: FirebaseFirestore.DocumentSnapshot): Product {
         imagenes,
         folderCloudinary: data.FolderCloudinary || '',
         tipo_propiedad: data.tipo_propiedad || '',
+        categoriaId: data.categoriaId || 'generales',
     };
 }
 
@@ -107,11 +163,15 @@ export async function getProductRawImages(id: string, storeId: string): Promise<
     }
 }
 
-export async function getAllProducts(storeId?: string): Promise<Product[]> {
+export async function getAllProducts(storeId?: string, categoriaId?: string): Promise<Product[]> {
     if (!firebaseAdmin) return [];
     try {
         const db = firebaseAdmin.firestore();
-        const snapshot = await db.collection('Propiedades').get();
+        let query: FirebaseFirestore.Query = db.collection('Propiedades');
+        if (categoriaId) {
+            query = query.where('categoriaId', '==', categoriaId);
+        }
+        const snapshot = await query.get();
         return snapshot.docs.map(doc => mapDocToProduct(doc));
     } catch (e) {
         logger.error(`Error getting all products: ${e}`);
@@ -139,6 +199,7 @@ export async function createProduct(product: Partial<Product>, storeId: string):
             Imagenes: product.imagenes || [],
             FolderCloudinary: product.folderCloudinary || '',
             tipo_propiedad: product.tipo_propiedad || '',
+            categoriaId: product.categoriaId || 'generales',
         };
         await db.collection('Propiedades').doc(id).set(newProduct);
         return { id, storeId, name: newProduct.nombre, description: '', productType: 'propiedad', imageUrl: '', checkoutUrl: '', ...newProduct, price: newProduct.precio, imagenes: newProduct.Imagenes, folderCloudinary: newProduct.FolderCloudinary };
@@ -172,6 +233,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, store
         if (updates.folderCloudinary !== undefined) dbUpdates.FolderCloudinary = updates.folderCloudinary;
         if (updates.checkoutUrl !== undefined) dbUpdates.checkoutUrl = updates.checkoutUrl;
         if (updates.tipo_propiedad !== undefined) dbUpdates.tipo_propiedad = updates.tipo_propiedad;
+        if (updates.categoriaId !== undefined) dbUpdates.categoriaId = updates.categoriaId;
 
         logger.info(`Firestore updating product ${id} with: ${JSON.stringify(dbUpdates)}`);
         await docRef.update(dbUpdates);

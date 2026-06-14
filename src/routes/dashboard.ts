@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getAllSessions, deleteSession, getMemory, saveMemory } from '../data/database';
-import { getAllProducts, createProduct, updateProduct, deleteProduct } from '../data/catalog';
+import { getAllProducts, createProduct, updateProduct, deleteProduct, getAllCategorias, createCategoria } from '../data/catalog';
 import { db } from '../data/connection';
 import { stores, users } from '../data/schema';
 import { eq } from 'drizzle-orm';
@@ -323,6 +323,37 @@ dashboardRouter.post('/api/upload-images', async (req: any, res: Response) => {
 });
 
 // ─────────────────────────────────────────
+//  CATEGORÍAS
+// ─────────────────────────────────────────
+
+/** GET /api/categorias — listar todas las categorías */
+dashboardRouter.get('/api/categorias', async (_req: Request, res: Response) => {
+    try {
+        const categorias = await getAllCategorias();
+        res.json(categorias);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/** POST /api/categorias — crear una categoría */
+dashboardRouter.post('/api/categorias', async (req: Request, res: Response) => {
+    try {
+        const { nombre } = req.body;
+        if (!nombre || !nombre.trim()) {
+            return res.status(400).json({ error: 'El nombre es obligatorio' });
+        }
+        const cat = await createCategoria(nombre);
+        if (!cat) {
+            return res.status(500).json({ error: 'Error al crear la categoría' });
+        }
+        res.status(201).json(cat);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─────────────────────────────────────────
 //  PRODUCTOS  (CRUD)
 // ─────────────────────────────────────────
 
@@ -335,7 +366,8 @@ dashboardRouter.get('/api/products', async (req: any, res: Response) => {
     if (!storeId && !isSuperAdmin(req))
         return res.status(400).json({ error: 'storeId es obligatorio' });
 
-    const products = await getAllProducts(storeId);
+    const categoriaId = req.query.categoriaId as string | undefined;
+    const products = await getAllProducts(storeId, categoriaId);
 
     res.json(products.map(p => ({
         id:               p.id,
@@ -354,6 +386,7 @@ dashboardRouter.get('/api/products', async (req: any, res: Response) => {
         imagenes:         p.imagenes         || [],
         folderCloudinary: p.folderCloudinary  || '',
         tipo_propiedad:   p.tipo_propiedad   || '',
+        categoriaId:      p.categoriaId      || 'generales',
     })));
 });
 
@@ -383,6 +416,7 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
             imagenes:         b.imagenes                 || [],
             folderCloudinary: b.folderCloudinary          || '',
             tipo_propiedad:   b.tipo_propiedad           || '',
+            categoriaId:      b.categoriaId              || 'generales',
         }, storeId);
 
         res.status(201).json(product);
@@ -419,6 +453,7 @@ dashboardRouter.put('/api/products/:id', async (req: any, res: Response) => {
             imagenes:         b.imagenes,
             folderCloudinary: b.folderCloudinary,
             tipo_propiedad:   b.tipo_propiedad,
+            categoriaId:      b.categoriaId,
         }, storeId);
 
         if (!updated) return res.status(404).json({ error: 'Propiedad no encontrada' });

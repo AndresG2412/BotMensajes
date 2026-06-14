@@ -40,6 +40,29 @@
             border-color: var(--brand); background: rgba(16,185,129,.05); color: var(--brand);
         }
         .upload-drop-zone i { font-size: 28px; display: block; margin-bottom: 6px; }
+        .category-chip {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text3);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            font-family: 'Inter', sans-serif;
+        }
+        .category-chip:hover {
+            color: var(--text2);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .category-chip.active {
+            color: #fff;
+            background: var(--brand-glow);
+            border-color: var(--brand);
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+        }
     </style>
 </head>
 <body>
@@ -125,9 +148,17 @@
                     <div style="display:flex;align-items:center;gap:16px;">
                         <h2><i class="ph ph-package" style="vertical-align:middle;margin-right:6px;"></i> Catálogo</h2>
                     </div>
-                    <button class="btn-primary" onclick="openProductModal()">
-                        <i class="ph ph-plus-circle"></i> Agregar Propiedad
-                    </button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn-sm" onclick="openCategoryModal()" style="display:flex;align-items:center;gap:6px;padding:9px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text2);cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;transition:all 0.2s;">
+                            <i class="ph ph-folder-plus"></i> Agregar Categoría
+                        </button>
+                        <button class="btn-primary" onclick="openProductModal()">
+                            <i class="ph ph-plus-circle"></i> Agregar Propiedad
+                        </button>
+                    </div>
+                </div>
+                <div class="categories-tabs-container" id="categoriesTabs" style="display:flex;gap:8px;padding:12px 24px;border-bottom:1px solid var(--border);overflow-x:auto;">
+                    <!-- Cargado dinámicamente -->
                 </div>
                 <div class="products-grid" id="productsGrid"></div>
             </div>
@@ -170,20 +201,27 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Referencia</label>
-                        <input type="text" id="pReferencia" placeholder="Ej: AP-102 (auto si vacío)">
+                        <label>Categoría *</label>
+                        <select id="pCategoria" class="text-[#F8FAFC] border border-[#2A3441] rounded-[8px] p-2" style="color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px;">
+                            <!-- Cargado dinámicamente -->
+                        </select>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
+                        <label>Referencia</label>
+                        <input type="text" id="pReferencia" placeholder="Ej: AP-102 (auto si vacío)">
+                    </div>
+                    <div class="form-group">
                         <label>Ciudad</label>
                         <input type="text" id="pCiudad" placeholder="Ej: Medellín">
                     </div>
-                    <div class="form-group">
-                        <label>Barrio</label>
-                        <input type="text" id="pBarrio" placeholder="Ej: El Poblado">
-                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Barrio</label>
+                    <input type="text" id="pBarrio" placeholder="Ej: El Poblado">
                 </div>
 
                 <div class="form-row">
@@ -269,6 +307,27 @@
         </div>
     </div>
 
+    <div class="modal-overlay hidden" id="categoryModal">
+        <div class="modal" style="width: 400px;">
+            <div class="modal-header">
+                <h3>Nueva Categoría</h3>
+                <button class="btn-icon" onclick="closeCategoryModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nombre de la Categoría *</label>
+                    <input type="text" id="catNombre" placeholder="Ej: Lotes Etapa 4">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeCategoryModal()">Cancelar</button>
+                <button class="btn-primary" onclick="saveCategory()" id="btnSaveCategory">
+                    <i class="ph ph-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
     // ═══════════════════════════════════════
     //  NOTIFICATIONS (TOASTS)
@@ -303,6 +362,8 @@
     let allSessions   = [];
     let allProducts   = [];
     let allStores     = [];
+    let allCategorias     = [];
+    let activeCategoriaId = '';
     let activeSessionId   = null;
     let editingProductId  = null;
     let editingStoreId    = null;
@@ -359,8 +420,14 @@
 
     async function safeFetch(url, options) {
         try {
-            const res = options ? await fetch(url, options) : await fetch(url);
+            const opts = { credentials: 'same-origin', ...options };
+            const res = await fetch(url, opts);
             if (!serverOnline) { serverOnline = true; showOfflineBanner(false); }
+            // Global auth redirect detection
+            if (res.redirected && res.url.includes('login')) {
+                window.location.href = '/login.html';
+                return null;
+            }
             return res;
         } catch(e) {
             if (serverOnline) { serverOnline = false; showOfflineBanner(true); }
@@ -379,14 +446,17 @@
     // ═══════════════════════════════════════
     //  TABS
     // ═══════════════════════════════════════
-    function switchTab(tab) {
+    async function switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
         const map = { chats: ['tabChats','pageChats'], products: ['tabProducts','pageProducts'], bots: ['tabBots','pageBots'] };
         const [btnId, pageId] = map[tab] || [];
         if (btnId) document.getElementById(btnId).classList.add('active');
         if (pageId) document.getElementById(pageId).classList.add('active');
-        if (tab === 'products') loadProducts();
+        if (tab === 'products') {
+            await loadCategorias();
+            await loadProducts();
+        }
         if (tab === 'bots')     loadStores();
     }
 
@@ -564,11 +634,112 @@
     //  PRODUCTS
     // ═══════════════════════════════════════
     async function loadProducts() {
-        const res = await safeFetch('/dashboard/api/products');
+        const url = activeCategoriaId ? `/dashboard/api/products?categoriaId=${encodeURIComponent(activeCategoriaId)}` : '/dashboard/api/products';
+        const res = await safeFetch(url);
         if (!res) return;
         allProducts = await res.json();
         document.getElementById('productCount').textContent = allProducts.length;
         renderProducts();
+    }
+
+    // ═══════════════════════════════════════
+    //  CATEGORÍAS
+    // ═══════════════════════════════════════
+    async function loadCategorias() {
+        const res = await safeFetch('/dashboard/api/categorias');
+        if (!res) return;
+        allCategorias = await res.json();
+        renderCategoriasTabs();
+        populateCategoriasDropdown();
+    }
+
+    function renderCategoriasTabs() {
+        const container = document.getElementById('categoriesTabs');
+        if (!container) return;
+        container.innerHTML = '';
+
+        // Pestaña "Todas"
+        const allTab = document.createElement('button');
+        allTab.className = 'category-chip' + (activeCategoriaId === '' ? ' active' : '');
+        allTab.textContent = 'Todas';
+        allTab.onclick = () => selectCategoria('');
+        container.appendChild(allTab);
+
+        allCategorias.forEach(cat => {
+            const tab = document.createElement('button');
+            tab.className = 'category-chip' + (activeCategoriaId === cat.id ? ' active' : '');
+            tab.textContent = cat.nombre;
+            tab.onclick = () => selectCategoria(cat.id);
+            container.appendChild(tab);
+        });
+    }
+
+    async function selectCategoria(id) {
+        activeCategoriaId = id;
+        renderCategoriasTabs();
+        await loadProducts();
+    }
+
+    function populateCategoriasDropdown() {
+        const select = document.getElementById('pCategoria');
+        if (!select) return;
+        select.innerHTML = '<option value="" style="background-color: var(--panel2); color: var(--text);">Seleccione categoría...</option>';
+        allCategorias.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat.id;
+            opt.textContent = cat.nombre;
+            opt.style.backgroundColor = 'var(--panel2)';
+            opt.style.color = 'var(--text)';
+            select.appendChild(opt);
+        });
+    }
+
+    function openCategoryModal() {
+        document.getElementById('catNombre').value = '';
+        document.getElementById('categoryModal').classList.remove('hidden');
+    }
+
+    function closeCategoryModal() {
+        document.getElementById('categoryModal').classList.add('hidden');
+    }
+
+    async function saveCategory() {
+        const nombre = document.getElementById('catNombre').value.trim();
+        if (!nombre) { showToast('El nombre es obligatorio', 'error'); return; }
+
+        const btn = document.getElementById('btnSaveCategory');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite"></i> Guardando...';
+
+        try {
+            const res = await safeFetch('/dashboard/api/categorias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre })
+            });
+            if (!res) throw new Error('No se pudo conectar al servidor');
+            // Detect auth redirect (server returned HTML login page)
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                if (res.redirected || res.url.includes('login')) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                throw new Error('Error inesperado del servidor');
+            }
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err?.error || 'Error al guardar categoría');
+            }
+            closeCategoryModal();
+            showToast('Categoría creada con éxito', 'success');
+            await loadCategorias();
+        } catch (e) {
+            showToast(e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-floppy-disk"></i> Guardar';
+        }
     }
 
     function renderProducts() {
@@ -721,6 +892,7 @@
         document.getElementById('pMetros').value       = '';
         document.getElementById('pFotos').value        = '';
         document.getElementById('pTipoPropiedad').value = '';
+        document.getElementById('pCategoria').value     = '';
         currentCaracteristicas = [];
         currentImages = [];
         renderCaracteristicas();
@@ -751,6 +923,7 @@
         document.getElementById('pMetros').value             = p.metros_cuadrados || '';
         document.getElementById('pFotos').value              = '';
         document.getElementById('pTipoPropiedad').value      = p.tipo_propiedad || '';
+        document.getElementById('pCategoria').value          = p.categoriaId || '';
         currentCaracteristicas = Array.isArray(p.caracteristicas) ? [...p.caracteristicas] : [];
         currentImages = (Array.isArray(p.imagenes) ? p.imagenes : []).map(url => ({
             file: null, previewUrl: url, cloudinaryUrl: url, status: 'existing'
@@ -804,6 +977,7 @@
                 descripcion_corta: document.getElementById('pBarrio').value.trim(),
                 descripcion_larga: currentCaracteristicas.join(', '),
                 tipo_propiedad:   document.getElementById('pTipoPropiedad').value,
+                categoriaId:      document.getElementById('pCategoria').value,
             };
 
             const url    = editingProductId ? `/dashboard/api/products/${editingProductId}` : '/dashboard/api/products';
@@ -1001,6 +1175,7 @@
     // ═══════════════════════════════════════
     async function initDashboard() {
         await loadStores();
+        await loadCategorias();
         loadSessions();
         loadProducts();
         setInterval(loadSessions, 5000);
