@@ -4,8 +4,8 @@ import { logger } from '../utils/logger';
 export type Product = {
     id: string;
     storeId: string;
-    name: string;          // display name derivado
-    nombre: string;        // nombre guardado por el usuario
+    nombre: string;
+    name: string;          // nombre real
     description: string;   // características formateadas
     productType: string;   // siempre 'propiedad'
     price: number;         // precio
@@ -41,12 +41,9 @@ function mapDocToProduct(doc: FirebaseFirestore.DocumentSnapshot): Product {
     const data = doc.data() || {};
     const barrio = data.barrio || '';
     const referencia = data.referencia || doc.id;
-    const nombre = data.nombre || '';
     const imagenes: string[] = Array.isArray(data.Imagenes) ? data.Imagenes : [];
     const caracteristicas: string[] = Array.isArray(data.caracteristicas) ? data.caracteristicas : [];
-
-    // Display name: usa nombre guardado, o fallback a barrio — referencia
-    const displayName = nombre || (barrio ? `${barrio} — ${referencia}` : referencia);
+    const nombre = data.nombre || data.name || (barrio ? `${barrio} — ${referencia}` : referencia);
 
     const description = [
         data.tipo_propiedad ? `Tipo de propiedad: ${data.tipo_propiedad}` : '',
@@ -61,8 +58,8 @@ function mapDocToProduct(doc: FirebaseFirestore.DocumentSnapshot): Product {
     return {
         id: doc.id,
         storeId: data.storeId || 'default',
-        name: displayName,
         nombre,
+        name: nombre,
         description,
         productType: 'propiedad',
         price: data.precio || 0,
@@ -129,7 +126,7 @@ export async function createProduct(product: Partial<Product>, storeId: string):
     try {
         const db = firebaseAdmin.firestore();
         const newProduct = {
-            nombre: product.nombre || '',
+            nombre: product.nombre || product.name || '',
             barrio: product.barrio || '',
             baños: product.baños || '',
             caracteristicas: product.caracteristicas || [],
@@ -144,7 +141,7 @@ export async function createProduct(product: Partial<Product>, storeId: string):
             tipo_propiedad: product.tipo_propiedad || '',
         };
         await db.collection('Propiedades').doc(id).set(newProduct);
-        return { id, storeId, name: newProduct.nombre || id, nombre: newProduct.nombre, description: '', productType: 'propiedad', imageUrl: '', checkoutUrl: '', ...newProduct, price: newProduct.precio, imagenes: newProduct.Imagenes, folderCloudinary: newProduct.FolderCloudinary, tipo_propiedad: newProduct.tipo_propiedad };
+        return { id, storeId, name: newProduct.nombre, description: '', productType: 'propiedad', imageUrl: '', checkoutUrl: '', ...newProduct, price: newProduct.precio, imagenes: newProduct.Imagenes, folderCloudinary: newProduct.FolderCloudinary };
     } catch (e) {
         logger.error(`Error creating product: ${e}`);
         return null;
@@ -161,6 +158,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, store
 
         const dbUpdates: any = {};
         if (updates.nombre !== undefined) dbUpdates.nombre = updates.nombre;
+        if (updates.name !== undefined) dbUpdates.nombre = updates.nombre || updates.name;
         if (updates.barrio !== undefined) dbUpdates.barrio = updates.barrio;
         if (updates.baños !== undefined) dbUpdates.baños = updates.baños;
         if (updates.caracteristicas !== undefined) dbUpdates.caracteristicas = updates.caracteristicas;
@@ -175,6 +173,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, store
         if (updates.checkoutUrl !== undefined) dbUpdates.checkoutUrl = updates.checkoutUrl;
         if (updates.tipo_propiedad !== undefined) dbUpdates.tipo_propiedad = updates.tipo_propiedad;
 
+        logger.info(`Firestore updating product ${id} with: ${JSON.stringify(dbUpdates)}`);
         await docRef.update(dbUpdates);
         const updated = await docRef.get();
         return mapDocToProduct(updated);

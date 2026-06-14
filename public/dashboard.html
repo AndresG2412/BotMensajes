@@ -7,6 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <style>
         @keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }
@@ -268,6 +270,33 @@
     </div>
 
     <script>
+    // ═══════════════════════════════════════
+    //  NOTIFICATIONS (TOASTS)
+    // ═══════════════════════════════════════
+    function showToast(message, type = 'success') {
+        Toastify({
+            text: message,
+            duration: 3500,
+            close: true,
+            gravity: "top",
+            position: "right",
+            stopOnFocus: true,
+            style: {
+                background: type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(239, 68, 68, 0.95)',
+                color: '#F8FAFC',
+                backdropFilter: 'blur(10px)',
+                border: type === 'success' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '10px',
+                boxShadow: type === 'success' ? '0 10px 30px rgba(16, 185, 129, 0.2)' : '0 10px 30px rgba(239, 68, 68, 0.2)',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '13px',
+                fontWeight: '500',
+                padding: '12px 20px',
+                zIndex: '99999'
+            }
+        }).showToast();
+    }
+
     // ═══════════════════════════════════════
     //  STATE
     // ═══════════════════════════════════════
@@ -568,7 +597,6 @@
                     <div style="display:flex;flex-direction:column;gap:4px;">
                         <span style="font-size:15px;font-weight:700;color:var(--brand);">${priceStr}</span>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;color:var(--text3);font-size:11px;">
-                            ${p.tipo_propiedad ? `<span style="color:var(--brand);font-weight:600;"><i class="ph ph-house-line" style="vertical-align:middle;"></i> ${escapeHTML(p.tipo_propiedad)}</span>` : ''}
                             ${p.habitaciones ? `<span><i class="ph ph-bed" style="vertical-align:middle;"></i> ${p.habitaciones}</span>` : ''}
                             ${p.baños        ? `<span><i class="ph ph-shower" style="vertical-align:middle;"></i> ${p.baños}</span>` : ''}
                             ${p.metros_cuadrados ? `<span><i class="ph ph-ruler" style="vertical-align:middle;"></i> ${p.metros_cuadrados}m²</span>` : ''}
@@ -793,8 +821,9 @@
 
             closeProductModal();
             await loadProducts();
+            showToast(editingProductId ? 'Propiedad actualizada con éxito' : 'Propiedad agregada con éxito', 'success');
         } catch(e) {
-            alert('Error: ' + e.message);
+            showToast(e.message, 'error');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<i class="ph ph-floppy-disk"></i> Guardar';
@@ -805,10 +834,12 @@
         if (!confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`)) return;
         const storeId = allStores.length > 0 ? allStores[0].id : '';
         const res = await safeFetch(`/dashboard/api/products/${id}?storeId=${storeId}`, { method: 'DELETE' });
-        if (res && res.ok) await loadProducts();
-        else {
+        if (res && res.ok) {
+            showToast('Propiedad eliminada con éxito', 'success');
+            await loadProducts();
+        } else {
             const err = await res?.json();
-            alert('Error deleting: ' + (err?.error || 'desconocido'));
+            showToast('Error al eliminar: ' + (err?.error || 'desconocido'), 'error');
         }
     }
 

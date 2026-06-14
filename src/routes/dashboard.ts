@@ -364,8 +364,9 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
         if (!storeId) return res.status(400).json({ error: 'storeId es obligatorio' });
 
         const b = req.body;
+        logger.info(`Creating product with body: ${JSON.stringify(b)}`);
         const product = await createProduct({
-            nombre:           b.nombre                   || '',
+            nombre:           b.nombre,
             name:             b.nombre,
             description:      b.caracteristicas?.join(', ') || '',
             productType:      'propiedad',
@@ -386,6 +387,7 @@ dashboardRouter.post('/api/products', async (req: any, res: Response) => {
 
         res.status(201).json(product);
     } catch (e: any) {
+        logger.error(`Error creating product in endpoint: ${e}`);
         res.status(400).json({ error: e.message });
     }
 });
@@ -398,6 +400,7 @@ dashboardRouter.put('/api/products/:id', async (req: any, res: Response) => {
         if (!storeId) return res.status(400).json({ error: 'storeId es obligatorio' });
 
         const b = req.body;
+        logger.info(`Updating product ${id} with body: ${JSON.stringify(b)}`);
         const updated = await updateProduct(id, {
             nombre:           b.nombre,
             name:             b.nombre,
@@ -421,6 +424,7 @@ dashboardRouter.put('/api/products/:id', async (req: any, res: Response) => {
         if (!updated) return res.status(404).json({ error: 'Propiedad no encontrada' });
         res.json(updated);
     } catch (e: any) {
+        logger.error(`Error updating product in endpoint: ${e}`);
         res.status(500).json({ error: e.message });
     }
 });
