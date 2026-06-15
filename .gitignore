@@ -5,6 +5,8 @@ dist/
 *.log
 data/database.sqlite
 data/
+!src/data/
+!src/data/**
 
 # WhatsApp Web Session Cache
 .wwebjs_auth/
