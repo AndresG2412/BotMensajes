@@ -168,7 +168,8 @@
             <div class="products-layout">
                 <div class="products-toolbar">
                     <h2><i class="ph ph-robot" style="vertical-align:middle;margin-right:6px;"></i> Administrador de Bots</h2>
-                    </div>
+                    <button class="btn-primary" onclick="createNewBot()"><i class="ph ph-plus"></i> Nueva Tienda / Bot</button>
+                </div>
                 <div class="bots-grid" id="botsGrid"></div>
             </div>
         </div>
@@ -1118,6 +1119,24 @@
         await safeFetch(`/dashboard/api/bots/start/${storeId}`, { method: 'POST' });
         updateBotStatus(storeId);
         startPolling(storeId);
+    }
+
+    async function createNewBot() {
+        const name = prompt('Ingresa el nombre de la nueva tienda o bot:');
+        if (!name || name.trim() === '') return;
+        
+        const id = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000);
+        
+        try {
+            await safeFetch('/dashboard/api/stores', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, name: name.trim() })
+            });
+            loadStores();
+        } catch (e) {
+            alert('Error al crear la tienda.');
+        }
     }
 
     async function deleteStore(id, name) {
