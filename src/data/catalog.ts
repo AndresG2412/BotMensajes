@@ -1,6 +1,16 @@
 import { firebaseAdmin } from '../config/firebase';
 import { logger } from '../utils/logger';
 
+/** Normaliza texto para comparaciones tolerantes a acentos, mayúsculas y espacios. */
+export function normalizeText(value: string): string {
+    return (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '');
+}
+
 export type Categoria = {
     id: string;
     nombre: string;
@@ -176,6 +186,99 @@ export async function getAllProducts(storeId?: string, categoriaId?: string): Pr
     } catch (e) {
         logger.error(`Error getting all products: ${e}`);
         return [];
+    }
+}
+
+export type ProductFilter = {
+    categoriaId: string;
+    ciudad?: string;
+    tipo_propiedad?: string;
+    presupuestoMax?: number;
+};
+
+export async function getProductsFiltered(filter: ProductFilter): Promise<Product[]> {
+    if (!firebaseAdmin) return [];
+    try {
+        const db = firebaseAdmin.firestore();
+        // Solo filtramos por categoría en Firestore. Ciudad y tipo se filtran en JS
+        // para tolerar acentos, mayúsculas y variaciones ("Timaná" vs "timana").
+        const query: FirebaseFirestore.Query = db.collection('Propiedades')
+            .where('categoriaId', '==', filter.categoriaId);
+
+        const snapshot = await query.get();
+        let results = snapshot.docs.map(doc => mapDocToProduct(doc));
+
+        if (filter.ciudad) {
+            const ciudadNorm = normalizeText(filter.ciudad);
+            results = results.filter(p => normalizeText(p.ciudad) === ciudadNorm);
+        }
+        if (filter.tipo_propiedad) {
+            const tipoNorm = normalizeText(filter.tipo_propiedad);
+            results = results.filter(p => normalizeText(p.tipo_propiedad).includes(tipoNorm) || tipoNorm.includes(normalizeText(p.tipo_propiedad)));
+        }
+
+        // El presupuesto solo se aplica si el cliente dio una cifra concreta (> 0).
+        // Si no dio presupuesto, se muestran TODAS las opciones disponibles.
+        if (filter.presupuestoMax && filter.presupuestoMax > 0) {
+            results = results.filter(p => p.price > 0 && p.price <= filter.presupuestoMax!);
+        }
+
+        return results;
+    } catch (e) {
+        logger.error(`Error filtering products: ${e}`);
+        return [];
+    }
+}
+
+/**
+ * Busca alternativas dentro de una categoría cuando el filtro exacto no devuelve nada.
+ * Relaja los criterios en este orden para nunca dejar al cliente sin opciones:
+ *   1) misma ciudad, cualquier tipo y precio
+ *   2) mismo tipo, cualquier ciudad y precio
+ *   3) cualquier propiedad de la categoría
+ * Devuelve además las ciudades y tipos realmente disponibles para que el bot
+ * pueda ofrecer cross-sell ("no hay en Timaná, pero tengo en Pitalito").
+ */
+export async function getAlternativeProducts(filter: ProductFilter): Promise<{
+    porCiudad: Product[];
+    porTipo: Product[];
+    enCategoria: Product[];
+    ciudadesDisponibles: string[];
+    tiposDisponibles: string[];
+}> {
+    const empty = { porCiudad: [], porTipo: [], enCategoria: [], ciudadesDisponibles: [], tiposDisponibles: [] };
+    if (!firebaseAdmin) return empty;
+    try {
+        const db = firebaseAdmin.firestore();
+        const snapshot = await db.collection('Propiedades')
+            .where('categoriaId', '==', filter.categoriaId)
+            .get();
+        const all = snapshot.docs.map(doc => mapDocToProduct(doc));
+        if (all.length === 0) return empty;
+
+        const ciudadNorm = filter.ciudad ? normalizeText(filter.ciudad) : '';
+        const tipoNorm   = filter.tipo_propiedad ? normalizeText(filter.tipo_propiedad) : '';
+
+        const porCiudad = ciudadNorm
+            ? all.filter(p => normalizeText(p.ciudad) === ciudadNorm)
+            : [];
+        const porTipo = tipoNorm
+            ? all.filter(p => normalizeText(p.tipo_propiedad).includes(tipoNorm) || tipoNorm.includes(normalizeText(p.tipo_propiedad)))
+            : [];
+
+        const ciudadesDisponibles = [...new Set(all.map(p => p.ciudad).filter(Boolean))];
+        const tiposDisponibles    = [...new Set(all.map(p => p.tipo_propiedad).filter(Boolean))];
+
+        return {
+            porCiudad,
+            porTipo,
+            enCategoria: all,
+            ciudadesDisponibles,
+            tiposDisponibles,
+        };
+    } catch (e) {
+        logger.error(`Error getting alternative products: ${e}`);
+        return empty;
     }
 }
 

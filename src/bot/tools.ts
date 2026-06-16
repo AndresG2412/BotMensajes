@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { searchProducts, getProductById, getAllProducts, getProductRawImages } from '../data/catalog';
+import { searchProducts, getProductById, getAllProducts, getProductRawImages, getProductsFiltered, getAlternativeProducts } from '../data/catalog';
 import { clearSession, getSession, setSessionAppointmentFlag, checkPendingAppointment, saveAppointment } from '../data/database';
 import { google } from 'googleapis';
 import { logger } from '../utils/logger';
@@ -11,17 +11,40 @@ import path from 'path';
 //  Cola temporal de imágenes pendientes
 // ─────────────────────────────────────────
 export type PendingImage = { mimetype: string; base64: string; caption?: string };
-let pendingImages: PendingImage[] = [];
+const pendingImagesMap = new Map<string, PendingImage[]>();
 
-export function getPendingImages(): PendingImage[] {
-    const images = [...pendingImages];
-    pendingImages = [];
+export function getPendingImages(sessionId: string): PendingImage[] {
+    const images = pendingImagesMap.get(sessionId) || [];
+    pendingImagesMap.delete(sessionId);
     return images;
 }
 
-function queueImage(base64DataUri: string, caption?: string) {
+function queueImage(sessionId: string, base64DataUri: string, caption?: string) {
     const match = base64DataUri.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-    if (match) pendingImages.push({ mimetype: match[1], base64: match[2], caption });
+    if (match) {
+        if (!pendingImagesMap.has(sessionId)) {
+            pendingImagesMap.set(sessionId, []);
+        }
+        pendingImagesMap.get(sessionId)!.push({ mimetype: match[1], base64: match[2], caption });
+    }
+}
+
+// ─────────────────────────────────────────
+//  Helper: resumen breve de propiedades para el modelo
+// ─────────────────────────────────────────
+function summarizeProducts(products: any[], max = 5) {
+    return products.slice(0, max).map(p => ({
+        id: p.id,
+        nombre: p.name,
+        ciudad: p.ciudad,
+        tipo: p.tipo_propiedad,
+        precio: p.price,
+        habitaciones: p.habitaciones,
+        baños: p.baños,
+        metros: p.metros_cuadrados,
+        descripcion: p.description,
+        referencia: p.referencia,
+    }));
 }
 
 // ─────────────────────────────────────────
@@ -93,15 +116,21 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             name: 'schedule_appointment',
             description: [
                 'Agenda una cita de visita o revisión de propiedad en Google Calendar.',
-                'SOLO llama esta función cuando el cliente haya proporcionado y confirmado TODOS los datos requeridos en el chat: client_name, phone, city, address, date y time.',
+                'SOLO llama esta función cuando el cliente haya proporcionado TODOS los datos requeridos según el tipo de cita.',
                 'REGLAS ESTRICTAS:',
-                '- NUNCA inventes, asumas ni completes por tu cuenta ninguno de estos datos si el cliente no los ha dicho explícitamente en la conversación.',
                 '- La fecha y hora deben ser proporcionadas directamente por el cliente.',
                 '- La fecha debe ser MÍNIMO el día siguiente al de hoy.',
-                '- La hora debe estar entre 14:00 (2 PM) y 18:00 (6 PM).',
-                '- Si el cliente no ha dado todos los datos (nombre, teléfono, ciudad, dirección, fecha y hora), NO llames esta función y continúa el flujo de preguntas paso a paso.',
+                '- La hora de inicio debe ser en punto (ej: 13:00, 14:00, 15:00, 16:00, 17:00) entre la 1:00 PM (13:00) y las 5:00 PM (17:00) inclusive. NUNCA permitas minutos (como 14:30 o 15:15).',
                 '- NUNCA modifiques ni canceles citas existentes. Solo crea nuevas.',
-                '- NUNCA reveles información de citas de otros clientes ni de sus fechas.'
+                '- NUNCA reveles información de citas de otros clientes ni de sus fechas.',
+                '',
+                'PARA VISITA DE ARRIENDO (visita_arriendo) O COMPRA (visita_compra):',
+                '- Solo necesitas del cliente: client_name, phone, date y time.',
+                '- city y address los tomas TÚ MISMO de los datos de la propiedad que el cliente eligió del catálogo (usa la ciudad y el nombre/referencia de la propiedad). NUNCA le preguntes la ciudad ni la dirección al cliente.',
+                '- property_reference es OBLIGATORIO: pon el nombre o referencia de la propiedad del catálogo.',
+                '',
+                'PARA REVISIÓN DE VENTA (revision_venta):',
+                '- Necesitas del cliente: client_name, phone, date, time, city y address (porque es la propiedad del cliente y no está en el catálogo).',
             ].join(' '),
             parameters: {
                 type: 'object',
@@ -112,7 +141,7 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     },
                     city: {
                         type: 'string',
-                        description: 'Ciudad de Colombia donde se solicita la cita o donde está la propiedad. Ej: "Pitalito", "Florencia", "Cali".'
+                        description: 'Ciudad donde está la propiedad. Para visita_arriendo/visita_compra: usa la ciudad de la propiedad del catálogo (NO preguntes al cliente). Para revision_venta: pídela al cliente.'
                     },
                     date: {
                         type: 'string',
@@ -120,7 +149,7 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     },
                     time: {
                         type: 'string',
-                        description: 'Hora en formato HH:MM (24h). Debe estar entre 14:00 y 18:00.'
+                        description: 'Hora en formato HH:MM (24h). Debe estar entre 13:00 y 17:00, y los minutos deben ser 00 (horas en punto).'
                     },
                     appointment_type: {
                         type: 'string',
@@ -129,18 +158,47 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     },
                     property_reference: {
                         type: 'string',
-                        description: 'Referencia o nombre de la propiedad a visitar, si el cliente ya eligió una.'
+                        description: 'Referencia o nombre de la propiedad del catálogo a visitar. OBLIGATORIO para visita_arriendo y visita_compra.'
                     },
                     address: {
                         type: 'string',
-                        description: 'Dirección o punto de referencia para la visita.'
+                        description: 'Dirección o punto de referencia. Para visita_arriendo/visita_compra: usa la referencia/nombre de la propiedad del catálogo (NO preguntes al cliente). Para revision_venta: pídela al cliente.'
                     },
                     phone: {
                         type: 'string',
                         description: 'Número de WhatsApp o de contacto del cliente.'
                     }
                 },
-                required: ['client_name', 'phone', 'city', 'address', 'date', 'time', 'appointment_type']
+                required: ['client_name', 'phone', 'date', 'time', 'appointment_type']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'filter_rental_properties',
+            description: 'Busca propiedades en arriendo filtrando por categoría de arriendo, ciudad, tipo de propiedad (casa, apartamento, lote) y presupuesto máximo mensual. Úsalo después de recopilar ciudad, presupuesto y tipo en el FLUJO C.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    categoriaId: {
+                        type: 'string',
+                        description: 'ID de la categoría de arriendo tal como está en Firebase. Usa el ID exacto que corresponde a arriendo según el contexto de categorías inyectado en el prompt.'
+                    },
+                    ciudad: {
+                        type: 'string',
+                        description: 'Ciudad donde el cliente busca arrendar. Ej: "Pitalito", "San Agustín", "Timaná".'
+                    },
+                    tipo_propiedad: {
+                        type: 'string',
+                        description: 'Tipo de propiedad: "casa", "apartamento" o "lote".'
+                    },
+                    presupuesto_max: {
+                        type: 'number',
+                        description: 'Presupuesto máximo mensual del cliente en pesos colombianos. Ej: 800000. Si no mencionó cifra exacta, usa 0.'
+                    }
+                },
+                required: ['categoriaId']
             }
         }
     },
@@ -158,6 +216,35 @@ export const botTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     }
                 },
                 required: ['reason']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'filter_sale_properties',
+            description: 'Busca propiedades en venta o lotes filtrando por categoría, ciudad, tipo de propiedad (casa, apartamento, lote, comercio) y presupuesto máximo. Úsalo en el FLUJO B después de recopilar ciudad, presupuesto y tipo del cliente.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    categoriaId: {
+                        type: 'string',
+                        description: 'ID de la categoría a buscar según las CATEGORÍAS DISPONIBLES inyectadas. Para propiedades generales usa el ID correspondiente; para lotes etapa 1 usa su ID; para lotes etapa 2 y 3 usa su ID. NUNCA inventes un categoriaId.'
+                    },
+                    ciudad: {
+                        type: 'string',
+                        description: 'Ciudad donde el cliente busca. Ej: "Pitalito", "San Agustín", "Timaná".'
+                    },
+                    tipo_propiedad: {
+                        type: 'string',
+                        description: 'Tipo de propiedad: "casa", "apartamento", "lote" o "comercio".'
+                    },
+                    presupuesto_max: {
+                        type: 'number',
+                        description: 'Presupuesto máximo del cliente en pesos colombianos. Usa 0 si no lo mencionó.'
+                    }
+                },
+                required: ['categoriaId']
             }
         }
     }
@@ -224,13 +311,17 @@ export async function executeTool(
                     const imageUrl = images[i];
                     const caption = i === 0 ? `📸 ${baseName} (${images.length} foto${images.length > 1 ? 's' : ''})` : undefined;
                     try {
+                        const sessionKey = sessionId || senderPhone || 'default';
                         if (imageUrl.startsWith('data:')) {
-                            queueImage(imageUrl, caption);
+                            queueImage(sessionKey, imageUrl, caption);
                         } else {
                             const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
                             const contentType = response.headers['content-type'] || 'image/jpeg';
                             const base64 = Buffer.from(response.data).toString('base64');
-                            pendingImages.push({ mimetype: contentType, base64, caption });
+                            if (!pendingImagesMap.has(sessionKey)) {
+                                pendingImagesMap.set(sessionKey, []);
+                            }
+                            pendingImagesMap.get(sessionKey)!.push({ mimetype: contentType, base64, caption });
                         }
                         sent++;
                     } catch (dlErr: any) {
@@ -242,6 +333,117 @@ export async function executeTool(
                     success: true,
                     message: `Se enviaron ${sent} imagen(es) de ${baseName}.`,
                     instructions_for_ai: 'Las imágenes ya fueron enviadas. Continúa tu respuesta de texto normalmente.'
+                });
+            }
+
+            // ── Filtrar propiedades en arriendo ────────────────────────
+            case 'filter_rental_properties': {
+                const { categoriaId, ciudad, tipo_propiedad, presupuesto_max } = args as {
+                    categoriaId: string;
+                    ciudad?: string;
+                    tipo_propiedad?: string;
+                    presupuesto_max?: number;
+                };
+
+                const results = await getProductsFiltered({
+                    categoriaId,
+                    ciudad: ciudad?.trim() || undefined,
+                    tipo_propiedad: tipo_propiedad?.trim() || undefined,
+                    presupuestoMax: presupuesto_max || 0,
+                });
+
+                if (results.length > 0) {
+                    return JSON.stringify({
+                        encontradas: results.length,
+                        propiedades: summarizeProducts(results),
+                        instrucciones: 'Presenta al cliente máximo 3 opciones de forma breve y vendedora. Para cada una menciona nombre/referencia, ciudad, tipo, precio mensual y 1 o 2 características que la hagan atractiva. Ofrece enviar fotos con send_product_image. Si le interesa visitar alguna, sigue el FLUJO CITA. Cierra siempre invitando a dar el siguiente paso.'
+                    });
+                }
+
+                // ── Sin match exacto: buscar alternativas para hacer cross-sell ──
+                const alt = await getAlternativeProducts({
+                    categoriaId,
+                    ciudad: ciudad?.trim() || undefined,
+                    tipo_propiedad: tipo_propiedad?.trim() || undefined,
+                });
+
+                // Hay propiedades en la ciudad pero el tipo/presupuesto no coincidió
+                if (alt.porCiudad.length > 0) {
+                    return JSON.stringify({
+                        encontradas: 0,
+                        alternativas: summarizeProducts(alt.porCiudad),
+                        instrucciones: `No hay arriendo exacto del tipo "${tipo_propiedad || ''}" o presupuesto pedido en ${ciudad || 'esa ciudad'}, pero SÍ hay otras opciones en ${ciudad}. Preséntalas como alternativa atractiva (máximo 3) y pregunta si le interesa alguna. NO ofrezcas avisar después: vende lo que hay ahora.`
+                    });
+                }
+
+                // No hay en esa ciudad, pero sí en otras → cross-sell de ciudad
+                if (alt.enCategoria.length > 0) {
+                    return JSON.stringify({
+                        encontradas: 0,
+                        ciudades_disponibles: alt.ciudadesDisponibles,
+                        alternativas: summarizeProducts(alt.enCategoria),
+                        instrucciones: `Por ahora no hay arriendo en ${ciudad || 'esa ciudad'}. NO digas que avisarás luego (esa función no existe). En su lugar, dile con naturalidad que sí tienes disponibles en ${alt.ciudadesDisponibles.join(', ')} y ofrécele esas opciones (máximo 3) por si le sirven. Sé un buen vendedor: muestra lo disponible y abre la puerta a una visita.`
+                    });
+                }
+
+                // Catálogo de arriendo realmente vacío
+                return JSON.stringify({
+                    encontradas: 0,
+                    instrucciones: 'No hay ninguna propiedad en arriendo cargada en el catálogo en este momento. Dile al cliente de forma honesta y amable que ahora mismo no tienes arriendos disponibles, e invítalo a contarte si también consideraría comprar, donde sí hay opciones.'
+                });
+            }
+
+            // ── Filtrar propiedades en venta ────────────────────────────
+            case 'filter_sale_properties': {
+                const { categoriaId, ciudad, tipo_propiedad, presupuesto_max } = args as {
+                    categoriaId: string;
+                    ciudad?: string;
+                    tipo_propiedad?: string;
+                    presupuesto_max?: number;
+                };
+
+                const results = await getProductsFiltered({
+                    categoriaId,
+                    ciudad: ciudad?.trim() || undefined,
+                    tipo_propiedad: tipo_propiedad?.trim() || undefined,
+                    presupuestoMax: presupuesto_max || 0,
+                });
+
+                if (results.length > 0) {
+                    return JSON.stringify({
+                        encontradas: results.length,
+                        propiedades: summarizeProducts(results),
+                        instrucciones: 'Presenta al cliente máximo 3 opciones de forma breve y vendedora. Para cada una menciona nombre/referencia, ciudad, tipo, precio de venta y 1 o 2 características atractivas. Ofrece enviar fotos con send_product_image. Si le interesa visitar alguna, inicia el FLUJO CITA. Cierra invitando a agendar la visita.'
+                    });
+                }
+
+                // ── Sin match exacto: alternativas para cross-sell ──
+                const alt = await getAlternativeProducts({
+                    categoriaId,
+                    ciudad: ciudad?.trim() || undefined,
+                    tipo_propiedad: tipo_propiedad?.trim() || undefined,
+                });
+
+                if (alt.porCiudad.length > 0) {
+                    return JSON.stringify({
+                        encontradas: 0,
+                        alternativas: summarizeProducts(alt.porCiudad),
+                        instrucciones: `No hay venta exacta del tipo "${tipo_propiedad || ''}" o presupuesto pedido en ${ciudad || 'esa ciudad'}, pero SÍ hay otras opciones en ${ciudad}. Preséntalas como alternativa (máximo 3) y pregunta si le interesa alguna. NO ofrezcas avisar después: vende lo que hay.`
+                    });
+                }
+
+                if (alt.enCategoria.length > 0) {
+                    return JSON.stringify({
+                        encontradas: 0,
+                        ciudades_disponibles: alt.ciudadesDisponibles,
+                        alternativas: summarizeProducts(alt.enCategoria),
+                        instrucciones: `Por ahora no hay venta en ${ciudad || 'esa ciudad'} con esos criterios. NO digas que avisarás luego (esa función no existe). En su lugar, dile que sí tienes disponibles en ${alt.ciudadesDisponibles.join(', ')} y ofrécele esas opciones (máximo 3). Sé buen vendedor: muestra lo disponible y propón una visita.`
+                    });
+                }
+
+                return JSON.stringify({
+                    encontradas: 0,
+                    instrucciones: 'No hay propiedades de esa categoría cargadas en el catálogo en este momento. Dile al cliente de forma honesta y amable, y ofrécele explorar otra categoría o tipo de propiedad disponible.'
                 });
             }
 
@@ -258,19 +460,39 @@ export async function executeTool(
                     phone?: string;
                 };
 
-                // ── Validar que todos los campos requeridos estén presentes y no vacíos ──
+                // ── Validar campos según tipo de cita ──
+                const isPropertyVisit = appointment_type === 'visita_arriendo' || appointment_type === 'visita_compra';
+
+                // Para visitas de arriendo/compra, city y address son opcionales (se auto-rellenan desde la propiedad)
+                const effectiveCity = city?.trim() || (isPropertyVisit ? (property_reference || 'Por definir') : '');
+                const effectiveAddress = address?.trim() || (isPropertyVisit ? (property_reference || 'Propiedad del catálogo') : '');
+
                 if (
                     !client_name || !client_name.trim() ||
-                    !city || !city.trim() ||
                     !date || !date.trim() ||
                     !time || !time.trim() ||
                     !appointment_type || !appointment_type.trim() ||
-                    !address || !address.trim() ||
                     !phone || !phone.trim()
                 ) {
                     return JSON.stringify({
                         success: false,
-                        instructions_for_ai: 'Faltan datos obligatorios para poder agendar la cita. Asegúrate de pedir amablemente al cliente cada uno de los siguientes datos que falten o que no estén claros: nombre completo, teléfono de contacto de 10 dígitos, ciudad, dirección o referencia de la propiedad, fecha y hora de la cita.'
+                        instructions_for_ai: 'Faltan datos obligatorios para poder agendar la cita. Asegúrate de tener: nombre completo, teléfono de contacto de 10 dígitos, fecha y hora de la cita.'
+                    });
+                }
+
+                // Para revision_venta, city y address son obligatorios (el cliente los debe dar)
+                if (!isPropertyVisit && (!effectiveCity || !effectiveAddress)) {
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'Para una revisión de venta necesitas la ciudad y dirección del inmueble del cliente. Pídele amablemente esos datos.'
+                    });
+                }
+
+                // Para visitas de arriendo/compra, property_reference es obligatorio
+                if (isPropertyVisit && (!property_reference || !property_reference.trim())) {
+                    return JSON.stringify({
+                        success: false,
+                        instructions_for_ai: 'Para agendar una visita de arriendo o compra debes incluir la referencia de la propiedad del catálogo que el cliente quiere visitar. Revisa la conversación y usa el nombre o ID de la propiedad que el cliente eligió.'
                     });
                 }
 
@@ -316,10 +538,10 @@ export async function executeTool(
                         instructions_for_ai: 'La fecha solicitada es hoy o en el pasado. Dile al cliente que la cita más próxima disponible es mañana y pregúntale qué día le queda bien.'
                     });
                 }
-                if (hour < 14 || hour >= 18) {
+                if (hour < 13 || hour > 17 || minute !== 0) {
                     return JSON.stringify({
                         success: false,
-                        instructions_for_ai: 'La hora está fuera del rango permitido (2 PM – 6 PM). Dile al cliente el horario disponible y pregúntale qué hora dentro de ese rango le queda bien.'
+                        instructions_for_ai: 'La hora solicitada no es válida. Las citas se programan únicamente en horas exactas (13:00, 14:00, 15:00, 16:00, 17:00) y la última cita disponible para iniciar es a las 5:00 PM (17:00). Dile de forma amable al cliente que por favor proporcione una hora en punto (ej. 2:00 PM o 14:00) dentro de este rango.'
                     });
                 }
                 if (!adminCalendarEmail) {
@@ -363,7 +585,7 @@ export async function executeTool(
                         return JSON.stringify({
                             success: false,
                             error: 'Horario ocupado',
-                            instructions_for_ai: `El horario de las ${time} del día ${date} ya está reservado por otra persona. Dile de forma muy amable al cliente que ese espacio no está disponible e invítalo a proponer otra hora (entre 2 PM y 6 PM) u otra fecha.`
+                            instructions_for_ai: `El horario de las ${time} del día ${date} ya está reservado por otra persona. Dile de forma muy amable al cliente que ese espacio no está disponible e invítalo a proponer otra hora (en punto entre la 1:00 PM y las 5:00 PM) u otra fecha.`
                         });
                     }
 
@@ -371,13 +593,13 @@ export async function executeTool(
                     await calendar.events.insert({
                         calendarId: adminCalendarEmail,
                         requestBody: {
-                            summary: `${typeLabels[appointment_type]} (${city}) — ${client_name}`,
+                            summary: `${typeLabels[appointment_type]} (${effectiveCity}) — ${client_name}`,
                             description: [
                                 `Cliente: ${client_name}`,
-                                `Ciudad: ${city}`,
+                                `Ciudad: ${effectiveCity}`,
                                 phone ? `WhatsApp: ${phone}` : '',
                                 property_reference ? `Propiedad: ${property_reference}` : '',
-                                address ? `Dirección / referencia: ${address}` : '',
+                                effectiveAddress ? `Dirección / referencia: ${effectiveAddress}` : '',
                                 `Tipo: ${typeLabels[appointment_type]}`,
                                 `Agendado automáticamente vía bot de WhatsApp — SIS Inmobiliaria`,
                             ].filter(Boolean).join('\n'),
@@ -390,13 +612,13 @@ export async function executeTool(
                     sendAppointmentNotification({
                         adminEmail: adminCalendarEmail,
                         clientName: client_name,
-                        city,
+                        city: effectiveCity,
                         date,
                         time,
                         appointmentType: appointment_type,
                         phone,
                         propertyReference: property_reference,
-                        address,
+                        address: effectiveAddress,
                     });
 
                     // ── Guardar flag de cita agendada en la sesión y base de datos ──
@@ -404,12 +626,12 @@ export async function executeTool(
                         await setSessionAppointmentFlag(sessionId, true);
                         await saveAppointment(storeId, senderPhone, {
                             clientName: client_name,
-                            city,
+                            city: effectiveCity,
                             date,
                             time,
                             appointmentType: appointment_type,
                             propertyReference: property_reference || '',
-                            address: address || '',
+                            address: effectiveAddress || '',
                             phone: phone || '',
                             status: 'scheduled',
                             createdAt: new Date()
@@ -424,9 +646,9 @@ export async function executeTool(
                         success: true,
                         confirmed_date: date,
                         confirmed_time: time,
-                        city: city,
+                        city: effectiveCity,
                         contact_info: contactInfo,
-                        instructions_for_ai: `La cita quedó registrada con éxito en la ciudad de ${city}. Confirma al cliente: fecha ${date}, hora ${time}, y dile: "${contactInfo}"`
+                        instructions_for_ai: `La cita quedó registrada con éxito en la ciudad de ${effectiveCity}. Confirma al cliente: fecha ${date}, hora ${time}, y dile: "${contactInfo}"`
                     });
 
                 } catch (calErr: any) {

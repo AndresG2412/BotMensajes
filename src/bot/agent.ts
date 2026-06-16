@@ -3,7 +3,7 @@ import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { botTools, executeTool, getPendingImages, PendingImage } from './tools';
 import { getMemory, saveMemory, getSessionLastActivity, clearSession, getSession, checkPendingAppointment, setSessionAppointmentFlag } from '../data/database';
-import { getAllProducts } from '../data/catalog';
+import { getAllProducts, getAllCategorias } from '../data/catalog';
 import { SECURITY_PROMPT } from './prompts';
 import { db } from '../data/connection';
 import { stores } from '../data/schema';
@@ -106,6 +106,17 @@ async function buildCatalogContext(storeId: string): Promise<string> {
     }
 }
 
+async function buildCategoriasContext(): Promise<string> {
+    try {
+        const categorias = await getAllCategorias();
+        if (categorias.length === 0) return '';
+        const lines = categorias.map(c => `- ID: "${c.id}" → Nombre: "${c.nombre}"`).join('\n');
+        return `\n\nCATEGORÍAS DISPONIBLES EN FIREBASE (usa estos IDs exactos en filter_rental_properties):\n${lines}`;
+    } catch {
+        return '';
+    }
+}
+
 // ─────────────────────────────────────────
 //  Sesión / historial
 // ─────────────────────────────────────────
@@ -166,7 +177,8 @@ export async function handleUserMessage(
     }
 
     // ── Construir system prompt enriquecido ──
-    const catalogContext = await buildCatalogContext(storeId);
+    const catalogContext    = await buildCatalogContext(storeId);
+    const categoriasContext = await buildCategoriasContext();
 
     // Fecha y hora actual en zona horaria de Colombia
     const nowColombia = new Date().toLocaleString('es-CO', {
@@ -212,7 +224,7 @@ export async function handleUserMessage(
 `;
     }
 
-    const enrichedSystemPrompt = SECURITY_PROMPT + '\n\n' + baseSystemPrompt + appointmentInstruction + dateContext + catalogContext;
+    const enrichedSystemPrompt = SECURITY_PROMPT + '\n\n' + baseSystemPrompt + appointmentInstruction + dateContext + categoriasContext + catalogContext;
 
     // ── Cierre por inactividad ──
     const lastActivity = await getSessionLastActivity(sessionId);
@@ -390,7 +402,7 @@ export async function handleUserMessage(
 
         await saveMemory(sessionId, storeId, senderPhone, finalHistory);
 
-        return { text: outMessages[0], messages: outMessages, images: getPendingImages() };
+        return { text: outMessages[0], messages: outMessages, images: getPendingImages(sessionId) };
 
     } catch (error: any) {
         logger.error(
