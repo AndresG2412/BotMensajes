@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { config } from '../config/env';
 import { logger } from './logger';
 
-const resend = new Resend(config.RESEND_API_KEY);
+const resend = config.RESEND_API_KEY ? new Resend(config.RESEND_API_KEY) : null;
 
 export interface AppointmentEmailData {
     adminEmail: string;
@@ -17,7 +17,7 @@ export interface AppointmentEmailData {
 }
 
 export async function sendAppointmentNotification(data: AppointmentEmailData): Promise<void> {
-    if (!config.RESEND_API_KEY) {
+    if (!resend) {
         logger.warn('RESEND_API_KEY no configurada — notificación de cita omitida');
         return;
     }

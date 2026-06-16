@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { stores } from '../data/schema';
 import { eq } from 'drizzle-orm';
 import { db } from '../data/connection';
+import { config } from '../config/env';
 
 const telegramBots = new Map<string, TelegramBot>();
 
@@ -57,8 +58,8 @@ export async function initTelegramBot(storeId: string, token: string) {
                 storeId,
                 chatId,
                 userText,
-                store.systemPrompt,
-                store.openaiApiKey || null
+                store.systemPrompt || '',
+                store.openaiApiKey || config.OPENAI_API_KEY
             );
 
             if (response) {

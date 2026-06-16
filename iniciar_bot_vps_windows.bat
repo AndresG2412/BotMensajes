@@ -13,7 +13,9 @@ IF NOT EXIST "node_modules\" (
 )
 
 echo [*] Compilando el codigo para aplicar los ultimos cambios...
+set NODE_OPTIONS=--max-old-space-size=2048
 call npm run build
+set NODE_OPTIONS=
 echo.
 
 echo [*] Iniciando el Bot de WhatsApp en primer plano...

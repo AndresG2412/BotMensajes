@@ -1,93 +1,60 @@
 import fs from 'fs';
 import path from 'path';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import * as schema from './schema';
 
 const dataDir = path.join(process.cwd(), 'data');
 const storesFile = path.join(dataDir, 'local-stores.json');
-
-type LocalStore = {
-    id: string;
-    name: string;
-    isActive: boolean;
-    systemPrompt: string;
-    openaiApiKey?: string | null;
-    pqrEmail?: string | null;
-    adminCalendarEmail?: string | null;
-    telegramToken?: string | null;
-    telegramBotActive?: boolean;
-    whatsappPhoneNumberId?: string | null;
-    whatsappAccessToken?: string | null;
-};
+const dbFile = path.join(dataDir, 'database.sqlite');
 
 function ensureDataDir() {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 }
 
-function loadStores(): LocalStore[] {
-    try {
-        if (fs.existsSync(storesFile)) {
-            const parsed = JSON.parse(fs.readFileSync(storesFile, 'utf8'));
-            if (Array.isArray(parsed)) return parsed;
-        }
-    } catch {
-        // Si el archivo local se corrompe, arrancamos con la tienda base.
-    }
+ensureDataDir();
 
-    return [{ id: "default", name: "Mi Tienda", isActive: true, systemPrompt: "" }];
-}
+const sqlite = new Database(dbFile);
+export const db = drizzle(sqlite, { schema });
 
-function saveStores(stores: LocalStore[]) {
-    ensureDataDir();
-    fs.writeFileSync(storesFile, JSON.stringify(stores, null, 2));
-}
-
-let localStores = loadStores();
-
-// Mock de base de datos para saltar Postgres y usar una tienda por defecto (Single-Tenant)
-export const db = {
-    query: {
-        users: { 
-            findFirst: async () => null, 
-            findMany: async () => [] 
-        },
-        stores: { 
-            findFirst: async () => localStores[0] || null,
-            findMany: async () => localStores
-        },
-        products: {
-            findFirst: async () => null,
-            findMany: async () => []
-        }
-    },
-    select: () => ({ from: async () => [] }),
-    insert: () => ({
-        values: (values: any) => ({
-            returning: async () => {
-                if (values?.systemPrompt !== undefined || values?.telegramToken !== undefined || values?.pqrEmail !== undefined) {
-                    const store = { ...values, isActive: values.isActive ?? true };
-                    localStores = [...localStores.filter(s => s.id !== store.id), store];
-                    saveStores(localStores);
-                    return [store];
+// Migración inicial desde JSON a SQLite si SQLite está vacío
+try {
+    if (fs.existsSync(storesFile)) {
+        // Verificar si la tabla existe (para no fallar en el primer arranque si aún no se corrió migrate)
+        const tableCheck = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='stores';").get();
+        
+        if (tableCheck) {
+            // Ver si hay tiendas en sqlite
+            const countRes: any = sqlite.prepare("SELECT count(*) as count FROM stores;").get();
+            if (countRes && countRes.count === 0) {
+                console.log("[INFO] Base de datos SQLite vacía. Migrando datos desde local-stores.json...");
+                const parsed = JSON.parse(fs.readFileSync(storesFile, 'utf8'));
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const insert = sqlite.prepare(`
+                        INSERT INTO stores (id, name, system_prompt, is_active, openai_api_key, pqr_email, admin_calendar_email, telegram_token, telegram_bot_active, whatsapp_phone_number_id, whatsapp_access_token)
+                        VALUES (@id, @name, @systemPrompt, @isActive, @openaiApiKey, @pqrEmail, @adminCalendarEmail, @telegramToken, @telegramBotActive, @whatsappPhoneNumberId, @whatsappAccessToken)
+                    `);
+                    
+                    for (const store of parsed) {
+                        insert.run({
+                            id: store.id || 'default',
+                            name: store.name || 'Mi Tienda',
+                            systemPrompt: store.systemPrompt || '',
+                            isActive: store.isActive ? 1 : 0,
+                            openaiApiKey: store.openaiApiKey || null,
+                            pqrEmail: store.pqrEmail || null,
+                            adminCalendarEmail: store.adminCalendarEmail || null,
+                            telegramToken: store.telegramToken || null,
+                            telegramBotActive: store.telegramBotActive ? 1 : 0,
+                            whatsappPhoneNumberId: store.whatsappPhoneNumberId || null,
+                            whatsappAccessToken: store.whatsappAccessToken || null
+                        });
+                    }
+                    console.log("[INFO] Migración desde JSON completada con éxito.");
                 }
-                return [{ id: '1', username: values?.username || 'admin', role: values?.role || 'superadmin' }];
             }
-        })
-    }),
-    delete: () => ({
-        where: async () => {
-            localStores = localStores.length > 1 ? localStores.slice(1) : [];
-            saveStores(localStores);
         }
-    }),
-    update: () => ({
-        set: (values: any) => ({
-            where: () => ({
-                returning: async () => {
-                    if (localStores.length === 0) localStores = [{ id: "default", name: "Mi Tienda", isActive: true, systemPrompt: "" }];
-                    localStores[0] = { ...localStores[0], ...values };
-                    saveStores(localStores);
-                    return [localStores[0]];
-                }
-            })
-        })
-    })
-} as any;
+    }
+} catch (error) {
+    console.error("[ERROR] Hubo un problema al intentar migrar los datos JSON a SQLite:", error);
+}

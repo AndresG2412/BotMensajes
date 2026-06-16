@@ -1,8 +1,23 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 // Cargar variables de entorno desde .env
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+const envPath = path.resolve(process.cwd(), '.env');
+if (!fs.existsSync(envPath)) {
+    console.error(`\n[ERROR CRITICO] No se encontró el archivo .env en la ruta: ${envPath}`);
+    console.error(`Posibles causas:`);
+    console.error(`- El archivo no fue creado.`);
+    console.error(`- En Windows se guardó como '.env.txt' por accidente. Revisa las extensiones ocultas.`);
+    console.error(`- Estás ejecutando el comando desde otro directorio.\n`);
+} else {
+    const result = dotenv.config({ path: envPath });
+    if (result.error) {
+        console.error(`\n[ERROR CRITICO] El archivo .env fue encontrado, pero hubo un error al leerlo (quizás formato o codificación UTF-16):`, result.error, `\n`);
+    } else {
+        console.log(`[INFO] Archivo .env cargado correctamente desde: ${envPath}`);
+    }
+}
 
 export const config = {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
@@ -28,7 +43,4 @@ export const config = {
 // Validación simple
 if (!config.OPENAI_API_KEY) {
     console.warn("⚠️ ADVERTENCIA: No se ha configurado OPENAI_API_KEY en el archivo .env!");
-}
-if (!config.META_ACCESS_TOKEN) {
-    console.warn("⚠️ ADVERTENCIA: No se ha configurado META_ACCESS_TOKEN para la WhatsApp Cloud API.");
 }

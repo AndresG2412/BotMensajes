@@ -102,7 +102,7 @@ export function startRemarketingCron(sendFunc: (storeId: string, to: string, msg
 
                     let msg: string;
                     try {
-                        msg = await generateRemarketingMessage(storeId, store.systemPrompt, apiKey, history);
+                        msg = await generateRemarketingMessage(storeId, store.systemPrompt || '', apiKey, history);
                     } catch (aiError: any) {
                         logger.error(`Error generando mensaje de remarketing con IA: ${aiError.message}`);
                         continue;
