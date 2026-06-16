@@ -27,30 +27,39 @@ try {
             // Ver si hay tiendas en sqlite
             const countRes: any = sqlite.prepare("SELECT count(*) as count FROM stores;").get();
             if (countRes && countRes.count === 0) {
-                console.log("[INFO] Base de datos SQLite vacía. Migrando datos desde local-stores.json...");
-                const parsed = JSON.parse(fs.readFileSync(storesFile, 'utf8'));
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const insert = sqlite.prepare(`
-                        INSERT INTO stores (id, name, system_prompt, is_active, openai_api_key, pqr_email, admin_calendar_email, telegram_token, telegram_bot_active, whatsapp_phone_number_id, whatsapp_access_token)
-                        VALUES (@id, @name, @systemPrompt, @isActive, @openaiApiKey, @pqrEmail, @adminCalendarEmail, @telegramToken, @telegramBotActive, @whatsappPhoneNumberId, @whatsappAccessToken)
-                    `);
-                    
-                    for (const store of parsed) {
-                        insert.run({
-                            id: store.id || 'default',
-                            name: store.name || 'Mi Tienda',
-                            systemPrompt: store.systemPrompt || '',
-                            isActive: store.isActive ? 1 : 0,
-                            openaiApiKey: store.openaiApiKey || null,
-                            pqrEmail: store.pqrEmail || null,
-                            adminCalendarEmail: store.adminCalendarEmail || null,
-                            telegramToken: store.telegramToken || null,
-                            telegramBotActive: store.telegramBotActive ? 1 : 0,
-                            whatsappPhoneNumberId: store.whatsappPhoneNumberId || null,
-                            whatsappAccessToken: store.whatsappAccessToken || null
-                        });
+                if (fs.existsSync(storesFile)) {
+                    console.log("[INFO] Base de datos SQLite vacía. Migrando datos desde local-stores.json...");
+                    const parsed = JSON.parse(fs.readFileSync(storesFile, 'utf8'));
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        const insert = sqlite.prepare(`
+                            INSERT INTO stores (id, name, system_prompt, is_active, openai_api_key, pqr_email, admin_calendar_email, telegram_token, telegram_bot_active, whatsapp_phone_number_id, whatsapp_access_token)
+                            VALUES (@id, @name, @systemPrompt, @isActive, @openaiApiKey, @pqrEmail, @adminCalendarEmail, @telegramToken, @telegramBotActive, @whatsappPhoneNumberId, @whatsappAccessToken)
+                        `);
+                        
+                        for (const store of parsed) {
+                            insert.run({
+                                id: store.id || 'default',
+                                name: store.name || 'Mi Tienda',
+                                systemPrompt: store.systemPrompt || '',
+                                isActive: store.isActive ? 1 : 0,
+                                openaiApiKey: store.openaiApiKey || null,
+                                pqrEmail: store.pqrEmail || null,
+                                adminCalendarEmail: store.adminCalendarEmail || null,
+                                telegramToken: store.telegramToken || null,
+                                telegramBotActive: store.telegramBotActive ? 1 : 0,
+                                whatsappPhoneNumberId: store.whatsappPhoneNumberId || null,
+                                whatsappAccessToken: store.whatsappAccessToken || null
+                            });
+                        }
+                        console.log("[INFO] Migración desde JSON completada con éxito.");
                     }
-                    console.log("[INFO] Migración desde JSON completada con éxito.");
+                } else {
+                    console.log("[INFO] Base de datos vacía y sin JSON previo. Creando tienda por defecto...");
+                    sqlite.prepare(`
+                        INSERT INTO stores (id, name, system_prompt, is_active)
+                        VALUES ('default', 'Mi Tienda', '', 1)
+                    `).run();
+                    console.log("[INFO] Tienda por defecto creada.");
                 }
             }
         }
