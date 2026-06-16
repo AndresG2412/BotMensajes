@@ -11,6 +11,7 @@ import {
 } from '../channels/whatsapp';
 import OpenAI from 'openai';
 import { v2 as cloudinary } from 'cloudinary';
+import bcrypt from 'bcrypt';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import crypto from 'crypto';
@@ -65,7 +66,8 @@ dashboardRouter.post('/api/users', checkSuperAdmin, async (req: Request, res: Re
         if (!username || !password)
             return res.status(400).json({ error: 'Usuario y contraseña obligatorios' });
 
-        const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
         const [user] = await db.insert(users).values({
             id: Date.now().toString(),
             username,

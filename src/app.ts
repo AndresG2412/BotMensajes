@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
+import bcrypt from 'bcrypt';
 import { config } from './config/env';
 import { logger } from './utils/logger';
 import { whatsappRouter, initializeWhatsAppClient, sendWhatsAppMessage, stopBotInstance } from './channels/whatsapp';
@@ -96,9 +97,21 @@ function bootstrap() {
             });
 
             if (user) {
-                // Implementación simple de hash comparativo (puedes mejorar esto con bcrypt después)
-                const hashedPass = crypto.createHash('sha256').update(password).digest('hex');
-                if (user.passwordHash === hashedPass || user.passwordHash === password) {
+                // Verificar con bcrypt, manteniendo soporte legado para SHA-256
+                let isValid = false;
+                if (user.passwordHash) {
+                    if (user.passwordHash.startsWith('$2b$') || user.passwordHash.startsWith('$2a$')) {
+                        isValid = await bcrypt.compare(password, user.passwordHash);
+                    } else {
+                        // Soporte legado para contraseñas creadas previamente con SHA-256
+                        const hashedPass = crypto.createHash('sha256').update(password).digest('hex');
+                        isValid = (user.passwordHash === hashedPass || user.passwordHash === password);
+                        
+                        // Opcional: Podríamos re-hashear y guardar con bcrypt aquí para migrar contraseñas viejas
+                    }
+                }
+
+                if (isValid) {
                     const token = jwt.sign({
                         user: user.username,
                         role: user.role,
